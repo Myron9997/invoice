@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Professional quotation styling */
+.quotation-box {
+  font-family: Arial, sans-serif;
+  line-height: 1.4;
+}
+
+/* Consistent cell padding with slightly higher text */
+.quotation-cell {
+  padding: 6px 6px 8px 6px !important;
+  vertical-align: top !important;
+  border-collapse: collapse;
+}
+
+/* Table styling */
+.quotation-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.quotation-table td,
+.quotation-table th {
+  padding: 6px 6px 8px 6px !important;
+  vertical-align: top !important;
+  border: 1px solid #d1d5db;
+}
+
+/* Grid cell styling */
+.quotation-grid-cell {
+  padding: 8px 6px !important;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+/* Flex container for vertical centering */
+.quotation-flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 40px;
+  padding: 8px 6px;
+}
+
+@media print {
+  .print\\:hidden,
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Ensure proper A4 sizing for PDF export */
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Prevent overflow in PDF */
+  * {
+    box-sizing: border-box;
+  }
+  
+  /* Ensure tables fit properly */
+  table {
+    width: 100% !important;
+    table-layout: fixed;
+  }
+  
+  /* Grid layouts for PDF */
+  .grid {
+    display: grid !important;
+  }
+  
+  /* Prevent text overflow */
+  .text-xs {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+  
+  /* Hide action buttons completely in PDF */
+  button {
+    display: none !important;
+  }
+  
+  /* Professional quotation styling for PDF */
+  .quotation-cell,
+  .quotation-table td,
+  .quotation-table th,
+  .quotation-grid-cell,
+  .quotation-flex-center {
+    padding: 6px 6px 8px 6px !important;
+    vertical-align: top !important;
+  }
+  
+  .quotation-table {
+    border-collapse: collapse !important;
+  }
+}
