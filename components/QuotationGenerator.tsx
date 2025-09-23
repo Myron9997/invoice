@@ -8,7 +8,7 @@ import React, { useState, useRef } from "react";
 
 export default function QuotationGenerator() {
   const [formVisible, setFormVisible] = useState(true);
-  const invoiceRef = useRef(null);
+  const invoiceRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const [company, setCompany] = useState({
@@ -57,7 +57,7 @@ export default function QuotationGenerator() {
     0
   );
 
-  const numberToWords = (num) => {
+  const numberToWords = (num: number): string => {
     if (!num) return "Zero";
     const units = [
       "",
@@ -83,7 +83,7 @@ export default function QuotationGenerator() {
     ];
     const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
 
-    const inWords = (n) => {
+    const inWords = (n: number): string => {
       if (n < 20) return units[n];
       if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + units[n % 10] : "");
       if (n < 1000) return units[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + inWords(n % 100) : "");
@@ -101,11 +101,11 @@ export default function QuotationGenerator() {
     ]);
   };
 
-  const updateItem = (id, field, value) => {
+  const updateItem = (id: number, field: string, value: any) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   };
 
-  const removeItem = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
+  const removeItem = (id: number) => setItems((prev) => prev.filter((it) => it.id !== id));
 
   // Download PDF with robust checks and dynamic import
   const downloadPDF = async () => {
@@ -149,12 +149,13 @@ export default function QuotationGenerator() {
       // Ensure all child elements respect the width
       const allElements = element.querySelectorAll('*');
       allElements.forEach(el => {
-        if (el.style.width && el.style.width.includes('%')) {
+        const htmlEl = el as HTMLElement;
+        if (htmlEl.style.width && htmlEl.style.width.includes('%')) {
           // Keep percentage widths
-        } else if (el.style.width && el.style.width.includes('px')) {
+        } else if (htmlEl.style.width && htmlEl.style.width.includes('px')) {
           // Convert px to mm for better PDF rendering
-          const pxValue = parseFloat(el.style.width);
-          el.style.width = `${pxValue * 0.264583}mm`;
+          const pxValue = parseFloat(htmlEl.style.width);
+          htmlEl.style.width = `${pxValue * 0.264583}mm`;
         }
       });
 
@@ -203,7 +204,8 @@ export default function QuotationGenerator() {
 
     } catch (err) {
       console.error("PDF export error:", err);
-      alert("Failed to generate PDF. See console for details. " + (err && err.message ? err.message : ""));
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      alert("Failed to generate PDF. See console for details. " + errorMessage);
     } finally {
       setIsExporting(false);
     }
