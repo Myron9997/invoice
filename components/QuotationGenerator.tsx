@@ -22,6 +22,7 @@ export default function QuotationGenerator() {
 
   const [meta, setMeta] = useState({
     title: "QUOTATION",
+    documentType: "Quotation No.",
     quotationNo: "02",
     dated: "08/02/2025",
     arrival: "23/02/2025",
@@ -141,12 +142,12 @@ export default function QuotationGenerator() {
 
   const removeItem = (id: number) => setItems((prev) => prev.filter((it) => it.id !== id));
 
-  // Auto-update title based on invoice type
+  // Auto-update title and document type based on invoice type
   useEffect(() => {
     if (invoiceType === 'tax-invoice') {
-      setMeta(prev => ({ ...prev, title: "TAX INVOICE" }));
+      setMeta(prev => ({ ...prev, title: "TAX INVOICE", documentType: "Invoice No." }));
     } else {
-      setMeta(prev => ({ ...prev, title: "QUOTATION" }));
+      setMeta(prev => ({ ...prev, title: "QUOTATION", documentType: "Quotation No." }));
     }
   }, [invoiceType]);
 
@@ -361,7 +362,7 @@ export default function QuotationGenerator() {
                   <h3 className="text-lg font-semibold text-gray-900">Document Details</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Document Title</label>
                     <input 
@@ -369,6 +370,15 @@ export default function QuotationGenerator() {
                       placeholder="e.g., QUOTATION, INVOICE, TAX INVOICE, BILL" 
                       value={meta.title} 
                       onChange={(e) => setMeta({ ...meta, title: e.target.value.toUpperCase() })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="e.g., Quotation No., Invoice No., Bill No." 
+                      value={meta.documentType} 
+                      onChange={(e) => setMeta({ ...meta, documentType: e.target.value })} 
                     />
                   </div>
                   <div>
@@ -617,9 +627,9 @@ export default function QuotationGenerator() {
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex justify-center">
       <div className="w-full max-w-4xl bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box" ref={invoiceRef}>
-        <div className="text-center py-1 border-b border-gray-300 font-semibold">
-          {meta.title}
-        </div>
+         <div className="text-center pb-2 border-b border-gray-300 font-bold text-base" style={{ marginTop: '0', paddingTop: '0' }}>
+           {meta.title}
+         </div>
 
         <table className="quotation-table w-full border border-gray-300">
           <tbody>
@@ -634,11 +644,11 @@ export default function QuotationGenerator() {
               <td className="quotation-cell w-1/2">
                 <table className="quotation-table w-full">
                   <tbody>
-                    <tr>
-                      <td className="quotation-cell border-r border-b border-gray-300 text-xs">
-                        <div className="font-semibold">Quotation No.</div>
-                        <div>{meta.quotationNo}</div>
-                      </td>
+                     <tr>
+                       <td className="quotation-cell border-r border-b border-gray-300 text-xs">
+                         <div className="font-semibold">{meta.documentType}</div>
+                         <div>{meta.quotationNo}</div>
+                       </td>
                       <td className="quotation-cell border-b border-gray-300 text-xs">
                         <div className="font-semibold">Dated</div>
                         <div>{meta.dated}</div>
@@ -811,37 +821,39 @@ export default function QuotationGenerator() {
         <table className="quotation-table w-full border-t border-gray-300">
           <tbody>
             <tr>
-              <td className="quotation-cell border-r border-gray-300 text-xs w-2/3">
+              <td className="quotation-cell border-r border-gray-300 text-xs w-1/2">
                 <strong>NOTES</strong>
                 <div className="mt-1 whitespace-pre-wrap">{notes}</div>
               </td>
-              <td className="quotation-cell text-xs w-1/3 text-right">
+              <td className="quotation-cell text-xs w-1/2 text-right">
                 For {company.name}
               </td>
             </tr>
           </tbody>
         </table>
 
-        <table className="quotation-table w-full border-t border-gray-300">
-          <tbody>
-            <tr>
-              <td className="quotation-cell border-r border-gray-300 text-xs w-2/3">
-                <strong>TERMS AND CONDITIONS</strong>
-                <div className="mt-1 whitespace-pre-wrap">{terms}</div>
-              </td>
-              <td className="quotation-cell text-xs w-1/3 text-right">
-                Authorised Signatory
-              </td>
-            </tr>
-          </tbody>
-        </table>
+         <table className="quotation-table w-full border-t border-gray-300">
+           <tbody>
+             <tr>
+               <td className="quotation-cell border-r border-gray-300 text-xs w-1/2" style={{ padding: '4px 6px' }}>
+                 <strong>TERMS AND CONDITIONS</strong>
+                 <div className="mt-1 whitespace-pre-wrap">{terms}</div>
+               </td>
+                 <td className="quotation-cell text-xs w-1/2 text-center font-bold" style={{ paddingTop: '100px', paddingBottom: '100px', paddingLeft: '6px', paddingRight: '6px', minHeight: '200px', height: '200px' }}>
+                   <div style={{ marginTop: '10px', marginBottom: '40px' }}>
+                     Authorised Signatory
+                   </div>
+                 </td>
+             </tr>
+           </tbody>
+         </table>
 
         <div className="text-center text-xs py-1 border-t border-gray-300">This is a Computer Generated Invoice</div>
 
-        <div className="p-2 text-center space-x-2 print:hidden no-print border-t border-gray-300">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => setFormVisible(true)}>Back to Edit</button>
-          <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={downloadPDF} disabled={isExporting}>{isExporting ? "Preparing PDF..." : "Download PDF"}</button>
-        </div>
+         <div className="p-2 text-center space-x-2 print:hidden no-print border-t border-gray-300">
+           <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => setFormVisible(true)}>Back to Edit</button>
+           <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={downloadPDF} disabled={isExporting}>{isExporting ? "Preparing PDF..." : "Download PDF"}</button>
+         </div>
       </div>
     </div>
   );
