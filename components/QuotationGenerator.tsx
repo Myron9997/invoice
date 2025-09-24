@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 // QuotationGenerator (fixed PDF export)
 // - Uses dynamic import of html2pdf.js to avoid SSR/bundler timing issues
@@ -8,6 +8,7 @@ import React, { useState, useRef } from "react";
 
 export default function QuotationGenerator() {
   const [formVisible, setFormVisible] = useState(true);
+  const [invoiceType, setInvoiceType] = useState<'invoice' | 'tax-invoice'>('invoice');
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -20,6 +21,7 @@ export default function QuotationGenerator() {
   });
 
   const [meta, setMeta] = useState({
+    title: "QUOTATION",
     quotationNo: "02",
     dated: "08/02/2025",
     arrival: "23/02/2025",
@@ -41,6 +43,8 @@ export default function QuotationGenerator() {
       rooms: 1,
       rate: 1800,
       nights: 14,
+      hsnSac: "996311",
+      gstRate: 12,
     },
   ]);
 
@@ -49,13 +53,43 @@ export default function QuotationGenerator() {
   );
 
   const [terms, setTerms] = useState(
-    `1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to [ENTER_YOUR_CITY_NAME] Jurisdiction only.`
+    `1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to GOA Jurisdiction only.`
   );
 
   const total = items.reduce(
     (s, it) => s + Number(it.rooms || 0) * Number(it.rate || 0) * Number(it.nights || 0),
     0
   );
+
+  // GST calculations - calculate GST for each item separately
+  const itemsWithGst = items.map(item => {
+    const itemTotal = Number(item.rooms || 0) * Number(item.rate || 0) * Number(item.nights || 0);
+    const itemGstRate = Number(item.gstRate || 0);
+    const itemCgstRate = itemGstRate / 2;
+    const itemSgstRate = itemGstRate / 2;
+    const itemCgstAmount = (itemTotal * itemCgstRate) / 100;
+    const itemSgstAmount = (itemTotal * itemSgstRate) / 100;
+    const itemGstTotal = itemCgstAmount + itemSgstAmount;
+    
+    return {
+      ...item,
+      itemTotal,
+      itemCgstAmount,
+      itemSgstAmount,
+      itemGstTotal
+    };
+  });
+
+  // Calculate total GST amounts
+  const totalCgstAmount = itemsWithGst.reduce((sum, item) => sum + item.itemCgstAmount, 0);
+  const totalSgstAmount = itemsWithGst.reduce((sum, item) => sum + item.itemSgstAmount, 0);
+  const totalGstAmount = totalCgstAmount + totalSgstAmount;
+  const grandTotal = total + totalGstAmount;
+
+  // For display purposes, use average GST rate
+  const avgGstRate = items.length > 0 ? items.reduce((sum, item) => sum + Number(item.gstRate || 0), 0) / items.length : 12;
+  const cgstRate = avgGstRate / 2;
+  const sgstRate = avgGstRate / 2;
 
   const numberToWords = (num: number): string => {
     if (!num) return "Zero";
@@ -97,7 +131,7 @@ export default function QuotationGenerator() {
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      { id: Date.now(), description: "", rooms: 1, rate: 0, nights: 1 },
+      { id: Date.now(), description: "", rooms: 1, rate: 0, nights: 1, hsnSac: "", gstRate: 12 },
     ]);
   };
 
@@ -106,6 +140,15 @@ export default function QuotationGenerator() {
   };
 
   const removeItem = (id: number) => setItems((prev) => prev.filter((it) => it.id !== id));
+
+  // Auto-update title based on invoice type
+  useEffect(() => {
+    if (invoiceType === 'tax-invoice') {
+      setMeta(prev => ({ ...prev, title: "TAX INVOICE" }));
+    } else {
+      setMeta(prev => ({ ...prev, title: "QUOTATION" }));
+    }
+  }, [invoiceType]);
 
   // Download PDF with robust checks and dynamic import
   const downloadPDF = async () => {
@@ -164,7 +207,7 @@ export default function QuotationGenerator() {
 
       const opt = {
         margin: [10, 10, 10, 10], // Top, Right, Bottom, Left margins in mm
-        filename: `Quotation-${meta.quotationNo || "NA"}.pdf`,
+        filename: `${meta.title}-${meta.quotationNo || "NA"}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { 
           scale: 1.5, // Reduced scale to prevent overflow
@@ -213,138 +256,359 @@ export default function QuotationGenerator() {
 
   if (formVisible) {
     return (
-      <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow space-y-4">
-        <h2 className="text-xl font-semibold">Quotation Input Form</h2>
-
-        {/* Company */}
-        <div>
-          <label className="block text-sm font-medium">Company Name</label>
-          <input className="border p-2 w-full" placeholder="Enter your company name" value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Address</label>
-          <textarea className="border p-2 w-full" placeholder="Enter complete company address" value={company.address} onChange={(e) => setCompany({ ...company, address: e.target.value })} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">GSTIN/UIN</label>
-          <input className="border p-2 w-full" placeholder="Enter GSTIN/UIN number" value={company.gstin} onChange={(e) => setCompany({ ...company, gstin: e.target.value })} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Email</label>
-          <input className="border p-2 w-full" placeholder="Enter company email" value={company.email} onChange={(e) => setCompany({ ...company, email: e.target.value })} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Mobile</label>
-          <input className="border p-2 w-full" placeholder="Enter company mobile number" value={company.mobile} onChange={(e) => setCompany({ ...company, mobile: e.target.value })} />
-        </div>
-
-        {/* Meta */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-sm">Quotation No</label>
-            <input className="border p-2 w-full" placeholder="e.g., 001, Q-2025-01" value={meta.quotationNo} onChange={(e) => setMeta({ ...meta, quotationNo: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-sm">Dated</label>
-            <input className="border p-2 w-full" placeholder="DD/MM/YYYY" value={meta.dated} onChange={(e) => setMeta({ ...meta, dated: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-sm">Arrival</label>
-            <input className="border p-2 w-full" placeholder="DD/MM/YYYY" value={meta.arrival} onChange={(e) => setMeta({ ...meta, arrival: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-sm">Departure</label>
-            <input className="border p-2 w-full" placeholder="DD/MM/YYYY" value={meta.departure} onChange={(e) => setMeta({ ...meta, departure: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-sm">Place of Supply</label>
-            <input className="border p-2 w-full" placeholder="e.g., Goa, Mumbai, Delhi" value={meta.placeOfSupply} onChange={(e) => setMeta({ ...meta, placeOfSupply: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-sm">Terms of Payment</label>
-            <input className="border p-2 w-full" placeholder="e.g., On Arrival, Advance, Net 30" value={meta.termsOfPayment} onChange={(e) => setMeta({ ...meta, termsOfPayment: e.target.value })} />
-          </div>
-        </div>
-
-        {/* Client */}
-        <div>
-          <label className="block text-sm">Bill To</label>
-          <input className="border p-2 w-full" placeholder="Enter client/customer name" value={client.billTo} onChange={(e) => setClient({ ...client, billTo: e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-sm">Mobile</label>
-          <input className="border p-2 w-full" placeholder="Enter client mobile number" value={client.mobile} onChange={(e) => setClient({ ...client, mobile: e.target.value })} />
-        </div>
-
-        {/* Items */}
-        <div>
-          <label className="block text-sm font-medium">Items</label>
-          {items.map((it) => (
-            <div key={it.id} className="border p-3 rounded mb-3 bg-gray-50">
-              <div className="mb-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Description of Service/Item</label>
-                <textarea 
-                  className="w-full border p-2 rounded" 
-                  placeholder="Describe the service/item (e.g., Room booking, Hotel accommodation, etc.)" 
-                  value={it.description} 
-                  onChange={(e) => updateItem(it.id, "description", e.target.value)} 
-                />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-4 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+            {/* Invoice Type Selection */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3">
+              <h2 className="text-white text-base font-semibold mb-2">📋 Select Invoice Type</h2>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 text-sm ${
+                    invoiceType === 'invoice' 
+                      ? 'bg-white text-blue-600 shadow-lg' 
+                      : 'bg-blue-500 text-white hover:bg-blue-400'
+                  }`}
+                  onClick={() => setInvoiceType('invoice')}
+                >
+                  📄 Generate Invoice
+                </button>
+                <button
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 text-sm ${
+                    invoiceType === 'tax-invoice' 
+                      ? 'bg-white text-blue-600 shadow-lg' 
+                      : 'bg-blue-500 text-white hover:bg-blue-400'
+                  }`}
+                  onClick={() => setInvoiceType('tax-invoice')}
+                >
+                  🧾 Generate Tax Invoice
+                </button>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">No. of Rooms</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={it.rooms}
-                    onChange={(e) => updateItem(it.id, "rooms", Number(e.target.value || 0))}
-                    placeholder="Enter number of rooms"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Rate per Room (₹)</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={it.rate}
-                    onChange={(e) => updateItem(it.id, "rate", Number(e.target.value || 0))}
-                    placeholder="Enter rate per room"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">No. of Nights</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full rounded"
-                    value={it.nights}
-                    onChange={(e) => updateItem(it.id, "nights", Number(e.target.value || 0))}
-                    placeholder="Enter number of nights"
-                  />
-                </div>
-              </div>
-              <button className="text-red-600 text-xs mt-2 hover:text-red-800" onClick={() => removeItem(it.id)}>Remove Item</button>
             </div>
-          ))}
-          <button className="bg-slate-800 text-white px-4 py-2 text-sm rounded hover:bg-slate-900" onClick={addItem}>+ Add New Item</button>
-        </div>
 
-        {/* Notes */}
-        <div>
-          <label className="block text-sm">Notes</label>
-          <textarea className="border p-2 w-full" placeholder="Enter any additional notes or special instructions for the client" value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </div>
+            <div className="p-4 space-y-6">
+              {/* Company Information */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 font-semibold text-sm">🏢</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Company Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                      <input 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter your company name" 
+                        value={company.name} 
+                        onChange={(e) => setCompany({ ...company, name: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN/UIN</label>
+                      <input 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter GSTIN/UIN number" 
+                        value={company.gstin} 
+                        onChange={(e) => setCompany({ ...company, gstin: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input 
+                        type="email"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter company email" 
+                        value={company.email} 
+                        onChange={(e) => setCompany({ ...company, email: e.target.value })} 
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <textarea 
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white resize-none text-sm" 
+                        placeholder="Enter complete company address" 
+                        value={company.address} 
+                        onChange={(e) => setCompany({ ...company, address: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+                      <input 
+                        type="tel"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter company mobile number" 
+                        value={company.mobile} 
+                        onChange={(e) => setCompany({ ...company, mobile: e.target.value })} 
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-        {/* Terms */}
-        <div>
-          <label className="block text-sm">Terms & Conditions</label>
-          <textarea className="border p-2 w-full" placeholder="Enter your terms and conditions (one per line)" value={terms} onChange={(e) => setTerms(e.target.value)} />
-        </div>
+              {/* Document Details */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                    <span className="text-green-600 font-semibold text-sm">📝</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Document Details</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Document Title</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="e.g., QUOTATION, INVOICE, TAX INVOICE, BILL" 
+                      value={meta.title} 
+                      onChange={(e) => setMeta({ ...meta, title: e.target.value.toUpperCase() })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Document Number</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="e.g., 001, Q-2025-01" 
+                      value={meta.quotationNo} 
+                      onChange={(e) => setMeta({ ...meta, quotationNo: e.target.value })} 
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dated</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="DD/MM/YYYY" 
+                      value={meta.dated} 
+                      onChange={(e) => setMeta({ ...meta, dated: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Arrival</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="DD/MM/YYYY" 
+                      value={meta.arrival} 
+                      onChange={(e) => setMeta({ ...meta, arrival: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Departure</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="DD/MM/YYYY" 
+                      value={meta.departure} 
+                      onChange={(e) => setMeta({ ...meta, departure: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Place of Supply</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="e.g., Goa, Mumbai, Delhi" 
+                      value={meta.placeOfSupply} 
+                      onChange={(e) => setMeta({ ...meta, placeOfSupply: e.target.value })} 
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Terms of Payment</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="e.g., On Arrival, Advance, Net 30" 
+                      value={meta.termsOfPayment} 
+                      onChange={(e) => setMeta({ ...meta, termsOfPayment: e.target.value })} 
+                    />
+                  </div>
+                </div>
+              </div>
 
-        <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={() => setFormVisible(false)}>Generate Invoice</button>
+              {/* Client Information */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                    <span className="text-purple-600 font-semibold text-sm">👤</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Client Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Bill To</label>
+                    <input 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="Enter client/customer name" 
+                      value={client.billTo} 
+                      onChange={(e) => setClient({ ...client, billTo: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+                    <input 
+                      type="tel"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                      placeholder="Enter client mobile number" 
+                      value={client.mobile} 
+                      onChange={(e) => setClient({ ...client, mobile: e.target.value })} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center">
+                      <span className="text-orange-600 font-semibold text-sm">📦</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Items & Services</h3>
+                  </div>
+                  <button 
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg text-sm" 
+                    onClick={addItem}
+                  >
+                    ➕ Add New Item
+                  </button>
+                </div>
+                
+                {items.map((it, index) => (
+                  <div key={it.id} className="bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-base font-semibold text-gray-800">Item #{index + 1}</h4>
+                      <button 
+                        className="text-red-600 hover:text-red-800 font-medium text-xs bg-red-50 px-2 py-1 rounded-lg hover:bg-red-100 transition-all duration-200" 
+                        onClick={() => removeItem(it.id)}
+                      >
+                        🗑️ Remove
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description of Service/Item</label>
+                        <textarea 
+                          rows={2}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white resize-none text-sm" 
+                          placeholder="Describe the service/item (e.g., Room booking, Hotel accommodation, etc.)" 
+                          value={it.description} 
+                          onChange={(e) => updateItem(it.id, "description", e.target.value)} 
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">HSN/SAC Code</label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-sm"
+                            value={it.hsnSac}
+                            onChange={(e) => updateItem(it.id, "hsnSac", e.target.value)}
+                            placeholder="e.g., 996311"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">GST Rate (%)</label>
+                          <input
+                            type="number"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-sm"
+                            value={it.gstRate}
+                            onChange={(e) => updateItem(it.id, "gstRate", Number(e.target.value || 0))}
+                            placeholder="e.g., 12"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">No. of Rooms</label>
+                          <input
+                            type="number"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-sm"
+                            value={it.rooms}
+                            onChange={(e) => updateItem(it.id, "rooms", Number(e.target.value || 0))}
+                            placeholder="Enter number of rooms"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Rate per Room (₹)</label>
+                          <input
+                            type="number"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-sm"
+                            value={it.rate}
+                            onChange={(e) => updateItem(it.id, "rate", Number(e.target.value || 0))}
+                            placeholder="Enter rate per room"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">No. of Nights</label>
+                          <input
+                            type="number"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-sm"
+                            value={it.nights}
+                            onChange={(e) => updateItem(it.id, "nights", Number(e.target.value || 0))}
+                            placeholder="Enter number of nights"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Notes & Terms */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
+                    <span className="text-yellow-600 font-semibold text-sm">📋</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Additional Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea 
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white resize-none text-sm" 
+                      placeholder="Enter any additional notes or special instructions for the client" 
+                      value={notes} 
+                      onChange={(e) => setNotes(e.target.value)} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label>
+                    <textarea 
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white resize-none text-sm" 
+                      placeholder="Enter your terms and conditions (one per line)" 
+                      value={terms} 
+                      onChange={(e) => setTerms(e.target.value)} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Generate Button */}
+              <div className="pt-4 border-t border-gray-200">
+                <button 
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl" 
+                  onClick={() => setFormVisible(false)}
+                >
+                  🚀 Generate Invoice
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -353,7 +617,9 @@ export default function QuotationGenerator() {
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex justify-center">
       <div className="w-full max-w-4xl bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box" ref={invoiceRef}>
-        <div className="text-center py-1 border-b border-gray-300 font-semibold">QUOTATION</div>
+        <div className="text-center py-1 border-b border-gray-300 font-semibold">
+          {meta.title}
+        </div>
 
         <table className="quotation-table w-full border border-gray-300">
           <tbody>
@@ -421,11 +687,17 @@ export default function QuotationGenerator() {
         <table className="quotation-table w-full border border-gray-300">
           <thead>
             <tr>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Sl No</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-left" style={{ width: '50%' }}>Description of Goods/Services</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Rooms</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>Rate</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Nights</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '6%' }}>Sl No</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-left" style={{ width: '35%' }}>Description of Goods/Services</th>
+              {invoiceType === 'tax-invoice' && (
+                <>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>HSN/SAC</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '6%' }}>GST Rate</th>
+                </>
+              )}
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Rooms</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Rate</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Nights</th>
               <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Amount</th>
             </tr>
           </thead>
@@ -434,6 +706,12 @@ export default function QuotationGenerator() {
               <tr key={it.id}>
                 <td className="quotation-cell text-center text-xs">{idx + 1}</td>
                 <td className="quotation-cell text-left text-xs break-words">{it.description}</td>
+                {invoiceType === 'tax-invoice' && (
+                  <>
+                    <td className="quotation-cell text-center text-xs">{it.hsnSac}</td>
+                    <td className="quotation-cell text-center text-xs">{it.gstRate}%</td>
+                  </>
+                )}
                 <td className="quotation-cell text-center text-xs">{it.rooms}</td>
                 <td className="quotation-cell text-right text-xs">₹{Number(it.rate).toLocaleString("en-IN")}</td>
                 <td className="quotation-cell text-center text-xs">{it.nights}</td>
@@ -441,9 +719,37 @@ export default function QuotationGenerator() {
               </tr>
             ))}
             <tr className="bg-gray-50">
-              <td colSpan={5} className="quotation-cell text-right font-bold text-sm">Total Amount</td>
-              <td className="quotation-cell text-right font-bold text-sm">₹{total.toLocaleString("en-IN")}</td>
+              <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
+              <td className="quotation-cell text-right font-semibold text-xs">₹{total.toLocaleString("en-IN")}</td>
             </tr>
+            {invoiceType === 'tax-invoice' && (
+              <>
+                 <tr>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-center">CGST</td>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-center">{cgstRate.toFixed(1)}%</td>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-right">₹{totalCgstAmount.toLocaleString("en-IN")}</td>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-right">₹{(total + totalCgstAmount).toLocaleString("en-IN")}</td>
+                 </tr>
+                 <tr>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-center">SGST</td>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-center">{sgstRate.toFixed(1)}%</td>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-right">₹{totalSgstAmount.toLocaleString("en-IN")}</td>
+                   <td className="quotation-cell text-xs text-center">-</td>
+                   <td className="quotation-cell text-xs text-right">₹{grandTotal.toLocaleString("en-IN")}</td>
+                 </tr>
+                 <tr className="bg-gray-50">
+                   <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">G. Total</td>
+                   <td className="quotation-cell text-right font-semibold text-sm">₹{grandTotal.toLocaleString("en-IN")}</td>
+                 </tr>
+              </>
+            )}
           </tbody>
         </table>
 
@@ -452,11 +758,55 @@ export default function QuotationGenerator() {
             <tr>
               <td className="quotation-cell text-xs">
                 <div className="font-semibold text-sm">Amount Chargeable (in words)</div>
-                <div className="italic">Indian Rupee {numberToWords(total)}</div>
+                <div className="italic">Indian Rupee {numberToWords(invoiceType === 'tax-invoice' ? grandTotal : total)}</div>
               </td>
             </tr>
           </tbody>
         </table>
+
+        {invoiceType === 'tax-invoice' && (
+          <table className="quotation-table w-full border-t border-gray-300">
+            <thead>
+              <tr>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Sr. No.</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>HSN/SAC</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '15%' }}>Taxable Value</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Central Tax Rate</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>Central Tax Amount</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>State Tax Rate</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>State Tax Amount</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Integrated Tax Rate</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '11%' }}>Total Tax Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsWithGst.map((it, idx) => (
+                <tr key={it.id}>
+                  <td className="quotation-cell text-center text-xs">{idx + 1}</td>
+                  <td className="quotation-cell text-center text-xs">{it.hsnSac}</td>
+                  <td className="quotation-cell text-right text-xs">₹{it.itemTotal.toLocaleString("en-IN")}</td>
+                  <td className="quotation-cell text-center text-xs">{it.itemCgstAmount > 0 ? (it.gstRate / 2).toFixed(1) : 0}%</td>
+                  <td className="quotation-cell text-right text-xs">₹{it.itemCgstAmount.toLocaleString("en-IN")}</td>
+                  <td className="quotation-cell text-center text-xs">{it.itemSgstAmount > 0 ? (it.gstRate / 2).toFixed(1) : 0}%</td>
+                  <td className="quotation-cell text-right text-xs">₹{it.itemSgstAmount.toLocaleString("en-IN")}</td>
+                  <td className="quotation-cell text-center text-xs">-</td>
+                  <td className="quotation-cell text-right text-xs font-semibold">₹{it.itemGstTotal.toLocaleString("en-IN")}</td>
+                </tr>
+              ))}
+              <tr className="bg-gray-50">
+                <td className="quotation-cell text-center text-xs font-bold">Total</td>
+                <td className="quotation-cell text-center text-xs font-bold">-</td>
+                <td className="quotation-cell text-right text-xs font-bold">₹{total.toLocaleString("en-IN")}</td>
+                <td className="quotation-cell text-center text-xs font-bold">-</td>
+                <td className="quotation-cell text-right text-xs font-bold">₹{totalCgstAmount.toLocaleString("en-IN")}</td>
+                <td className="quotation-cell text-center text-xs font-bold">-</td>
+                <td className="quotation-cell text-right text-xs font-bold">₹{totalSgstAmount.toLocaleString("en-IN")}</td>
+                <td className="quotation-cell text-center text-xs font-bold">-</td>
+                <td className="quotation-cell text-right text-xs font-bold">₹{totalGstAmount.toLocaleString("en-IN")}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
 
         <table className="quotation-table w-full border-t border-gray-300">
           <tbody>
