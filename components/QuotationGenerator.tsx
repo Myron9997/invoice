@@ -33,7 +33,11 @@ export default function QuotationGenerator() {
 
   const [client, setClient] = useState({
     billTo: "Mikhail & Elena Medvedeva",
-    mobile: "9204511935",
+    companyName: "",
+    address: "",
+    gstNumber: "",
+    phoneNumber: "9204511935",
+    email: "",
   });
 
   const [items, setItems] = useState([
@@ -450,25 +454,67 @@ export default function QuotationGenerator() {
                   <h3 className="text-lg font-semibold text-gray-900">Client Information</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Bill To</label>
-                    <input 
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
-                      placeholder="Enter client/customer name" 
-                      value={client.billTo} 
-                      onChange={(e) => setClient({ ...client, billTo: e.target.value })} 
-                    />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Bill To</label>
+                      <input 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter client/customer name" 
+                        value={client.billTo} 
+                        onChange={(e) => setClient({ ...client, billTo: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                      <input 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter company name" 
+                        value={client.companyName} 
+                        onChange={(e) => setClient({ ...client, companyName: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <textarea 
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white resize-none text-sm" 
+                        placeholder="Enter complete address" 
+                        value={client.address} 
+                        onChange={(e) => setClient({ ...client, address: e.target.value })} 
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-                    <input 
-                      type="tel"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
-                      placeholder="Enter client mobile number" 
-                      value={client.mobile} 
-                      onChange={(e) => setClient({ ...client, mobile: e.target.value })} 
-                    />
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+                      <input 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter GST number" 
+                        value={client.gstNumber} 
+                        onChange={(e) => setClient({ ...client, gstNumber: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                      <input 
+                        type="tel"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter phone number" 
+                        value={client.phoneNumber} 
+                        onChange={(e) => setClient({ ...client, phoneNumber: e.target.value })} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input 
+                        type="email"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                        placeholder="Enter email address" 
+                        value={client.email} 
+                        onChange={(e) => setClient({ ...client, email: e.target.value })} 
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -684,11 +730,13 @@ export default function QuotationGenerator() {
         <table className="quotation-table w-full border-t border-gray-300">
           <tbody>
             <tr>
-              <td className="quotation-cell border-r border-gray-300 text-xs w-2/3">
-                <strong>Bill To:</strong> {client.billTo}
-              </td>
-              <td className="quotation-cell text-xs w-1/3">
-                <strong>Mobile:</strong> {client.mobile}
+              <td className="quotation-cell text-xs w-full">
+                <div><strong>Bill To:</strong> {client.billTo}</div>
+                {client.companyName && <div className="mt-1"><strong>Company:</strong> {client.companyName}</div>}
+                {client.address && <div className="mt-1"><strong>Address:</strong> {client.address}</div>}
+                {client.gstNumber && <div className="mt-1"><strong>GST No:</strong> {client.gstNumber}</div>}
+                {client.phoneNumber && <div className="mt-1"><strong>Phone:</strong> {client.phoneNumber}</div>}
+                {client.email && <div className="mt-1"><strong>Email:</strong> {client.email}</div>}
               </td>
             </tr>
           </tbody>
