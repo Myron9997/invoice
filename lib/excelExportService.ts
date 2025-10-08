@@ -13,8 +13,8 @@ export class ExcelExportService {
       'Client Name': bill.client_bill_to,
       'Total Amount': bill.total_amount,
       'Grand Total': bill.grand_total || bill.total_amount,
-      'Created Date': new Date(bill.created_at).toLocaleDateString('en-IN'),
-      'Created Time': new Date(bill.created_at).toLocaleTimeString('en-IN')
+      'Created Date': bill.created_at ? bill.created_at ? new Date(bill.created_at).toLocaleDateString('en-IN') : '' : '',
+      'Created Time': bill.created_at ? new Date(bill.created_at).toLocaleTimeString('en-IN') : ''
     }))
 
     const worksheet = XLSX.utils.json_to_sheet(worksheetData)
@@ -83,8 +83,8 @@ export class ExcelExportService {
       'Terms': bill.terms,
       
       // Metadata
-      'Created Date': new Date(bill.created_at).toLocaleDateString('en-IN'),
-      'Created Time': new Date(bill.created_at).toLocaleTimeString('en-IN'),
+      'Created Date': bill.created_at ? bill.created_at ? new Date(bill.created_at).toLocaleDateString('en-IN') : '' : '',
+      'Created Time': bill.created_at ? new Date(bill.created_at).toLocaleTimeString('en-IN') : '',
       'Updated Date': bill.updated_at ? new Date(bill.updated_at).toLocaleDateString('en-IN') : ''
     }))
 
@@ -201,7 +201,7 @@ export class ExcelExportService {
       'Client Name': bill.client_bill_to,
       'Total Amount': bill.total_amount,
       'Grand Total': bill.grand_total || bill.total_amount,
-      'Created Date': new Date(bill.created_at).toLocaleDateString('en-IN')
+      'Created Date': bill.created_at ? new Date(bill.created_at).toLocaleDateString('en-IN') : ''
     }))
     
     const summarySheet = XLSX.utils.json_to_sheet(summaryData)
@@ -226,7 +226,7 @@ export class ExcelExportService {
       'Grand Total': bill.grand_total || bill.total_amount,
       'Items Count': bill.items.length,
       'Notes': bill.notes,
-      'Created Date': new Date(bill.created_at).toLocaleDateString('en-IN')
+      'Created Date': bill.created_at ? new Date(bill.created_at).toLocaleDateString('en-IN') : ''
     }))
     
     const detailedSheet = XLSX.utils.json_to_sheet(detailedData)
