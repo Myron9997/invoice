@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { BillService } from '../../../lib/billService'
 import { Bill } from '../../../lib/supabase'
+import { ExcelExportService } from '../../../lib/excelExportService'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
@@ -14,6 +15,7 @@ export default function BillDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
   const [isExporting, setIsExporting] = useState(false)
+  const [isExportingExcel, setIsExportingExcel] = useState(false)
 
   useEffect(() => {
     if (billId) {
@@ -83,6 +85,25 @@ export default function BillDetail() {
       alert("Failed to generate PDF. See console for details. " + errorMessage)
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const downloadExcel = async () => {
+    if (!bill) return
+
+    setIsExportingExcel(true)
+
+    try {
+      const filename = `${bill.document_title}-${bill.document_number}-${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      // Export as itemized (one row per item) for individual bills
+      ExcelExportService.exportItemizedBills([bill], filename)
+      
+    } catch (err) {
+      console.error("Excel export error:", err)
+      alert("Failed to export Excel. Please try again.")
+    } finally {
+      setIsExportingExcel(false)
     }
   }
 
@@ -156,7 +177,7 @@ export default function BillDetail() {
                 {bill.document_title} #{bill.document_number}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Link
                 href="/bills"
                 className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 transition-all duration-200"
@@ -175,6 +196,13 @@ export default function BillDetail() {
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 disabled:opacity-50"
               >
                 {isExporting ? '⏳ Exporting...' : '📄 Download PDF'}
+              </button>
+              <button
+                onClick={downloadExcel}
+                disabled={isExportingExcel}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-all duration-200 disabled:opacity-50"
+              >
+                {isExportingExcel ? '⏳ Exporting...' : '📊 Download Excel'}
               </button>
             </div>
           </div>

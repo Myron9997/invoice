@@ -15,7 +15,8 @@ export default function BillsList() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [isExporting, setIsExporting] = useState(false)
-  const [exportType, setExportType] = useState<'summary' | 'detailed' | 'comprehensive'>('summary')
+  const [exportType, setExportType] = useState<'summary' | 'detailed' | 'comprehensive' | 'complete' | 'itemized'>('summary')
+  const [exportingPdfId, setExportingPdfId] = useState<string | null>(null)
 
   useEffect(() => {
     loadBills()
@@ -101,6 +102,22 @@ export default function BillsList() {
           detailedBills.push(fullBill)
         }
         ExcelExportService.exportComprehensiveReport(detailedBills, filename)
+      } else if (exportType === 'complete') {
+        // For complete export, we need full bill data
+        const detailedBills: Bill[] = []
+        for (const bill of filteredBills) {
+          const fullBill = await BillService.getBillById(bill.id)
+          detailedBills.push(fullBill)
+        }
+        ExcelExportService.exportCompleteBills(detailedBills, filename)
+      } else if (exportType === 'itemized') {
+        // For itemized export, we need full bill data
+        const detailedBills: Bill[] = []
+        for (const bill of filteredBills) {
+          const fullBill = await BillService.getBillById(bill.id)
+          detailedBills.push(fullBill)
+        }
+        ExcelExportService.exportItemizedBills(detailedBills, filename)
       }
     } catch (err) {
       console.error('Export error:', err)
@@ -114,6 +131,28 @@ export default function BillsList() {
     setStartDate('')
     setEndDate('')
   }
+
+  const downloadBillExcel = async (billId: string) => {
+    setExportingPdfId(billId)
+    
+    try {
+      // Get the full bill data
+      const bill = await BillService.getBillById(billId)
+      
+      // Generate filename with date
+      const filename = `${bill.document_title}-${bill.document_number}-${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      // Export as itemized (one row per item) for individual bills with all information
+      ExcelExportService.exportItemizedBills([bill], filename)
+      
+    } catch (err) {
+      console.error("Excel export error:", err)
+      alert("Failed to export Excel. Please try again.")
+    } finally {
+      setExportingPdfId(null)
+    }
+  }
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -229,11 +268,13 @@ export default function BillsList() {
                 <select
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm"
                   value={exportType}
-                  onChange={(e) => setExportType(e.target.value as 'summary' | 'detailed' | 'comprehensive')}
+                  onChange={(e) => setExportType(e.target.value as 'summary' | 'detailed' | 'comprehensive' | 'complete' | 'itemized')}
                 >
                   <option value="summary">Summary Report</option>
                   <option value="detailed">Detailed Report</option>
                   <option value="comprehensive">Comprehensive Report</option>
+                  <option value="complete">Complete Report (All Fields)</option>
+                  <option value="itemized">Itemized Report (One Row Per Item)</option>
                 </select>
                 <button
                   onClick={exportToExcel}
@@ -349,6 +390,13 @@ export default function BillsList() {
                         >
                           ✏️ Edit
                         </Link>
+                        <button
+                          onClick={() => downloadBillExcel(bill.id)}
+                          disabled={exportingPdfId === bill.id}
+                          className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-all duration-200 text-sm disabled:opacity-50"
+                        >
+                          {exportingPdfId === bill.id ? '⏳ Exporting...' : '📊 Excel'}
+                        </button>
                         <button
                           onClick={() => deleteBill(bill.id)}
                           className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-all duration-200 text-sm"
