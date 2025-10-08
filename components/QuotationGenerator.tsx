@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
+import { BillService } from "../lib/billService";
+import { Bill } from "../lib/supabase";
 
 // QuotationGenerator (fixed PDF export)
 // - Uses dynamic import of html2pdf.js to avoid SSR/bundler timing issues
@@ -6,59 +8,82 @@ import React, { useState, useRef, useEffect } from "react";
 // - Provides user-friendly error handling and a small export-loading state
 // - Keeps the same UI/structure you had, with inputs and a generated preview
 
-export default function QuotationGenerator() {
+interface QuotationGeneratorProps {
+  initialData?: Bill;
+  mode?: 'create' | 'edit';
+  billId?: string;
+}
+
+export default function QuotationGenerator({ 
+  initialData, 
+  mode = 'create', 
+  billId 
+}: QuotationGeneratorProps) {
   const [formVisible, setFormVisible] = useState(true);
   const [invoiceType, setInvoiceType] = useState<'invoice' | 'tax-invoice'>('invoice');
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string>('');
 
+  // Initialize state with default values or initial data
   const [company, setCompany] = useState({
-    name: "PARK GRAND HOSPITALITY",
-    address: "H.No: 708 A, Ascona Cana, Benaulim, South-Goa, Goa 403717",
-    gstin: "30ACEPL2168C1Z8",
-    email: "sots.parkgrand@gmail.com",
-    mobile: "9552433413",
+    name: initialData?.company_name || "PARK GRAND HOSPITALITY",
+    address: initialData?.company_address || "H.No: 708 A, Ascona Cana, Benaulim, South-Goa, Goa 403717",
+    gstin: initialData?.company_gstin || "30ACEPL2168C1Z8",
+    email: initialData?.company_email || "sots.parkgrand@gmail.com",
+    mobile: initialData?.company_mobile || "9552433413",
   });
 
   const [meta, setMeta] = useState({
-    title: "QUOTATION",
-    documentType: "Quotation No.",
-    quotationNo: "02",
-    dated: "08/02/2025",
-    arrival: "23/02/2025",
-    departure: "09/03/2025",
-    placeOfSupply: "Goa",
-    termsOfPayment: "On Arrival",
+    title: initialData?.document_title || "QUOTATION",
+    documentType: initialData?.document_type || "Quotation No.",
+    quotationNo: initialData?.document_number || "02",
+    dated: initialData?.dated || "08/02/2025",
+    arrival: initialData?.arrival || "23/02/2025",
+    departure: initialData?.departure || "09/03/2025",
+    placeOfSupply: initialData?.place_of_supply || "Goa",
+    termsOfPayment: initialData?.terms_of_payment || "On Arrival",
   });
 
   const [client, setClient] = useState({
-    billTo: "Mikhail & Elena Medvedeva",
-    companyName: "",
-    address: "",
-    gstNumber: "",
-    phoneNumber: "9204511935",
-    email: "",
+    billTo: initialData?.client_bill_to || "Mikhail & Elena Medvedeva",
+    companyName: initialData?.client_company_name || "",
+    address: initialData?.client_address || "",
+    gstNumber: initialData?.client_gst_number || "",
+    phoneNumber: initialData?.client_phone_number || "9204511935",
+    email: initialData?.client_email || "",
   });
 
-  const [items, setItems] = useState([
-    {
-      id: 1,
-      description:
-        "Room No. 204 from 23rd February 2025 and Checkout on 9th March 2025 - Grand Royale Palms Benaulim, Goa",
-      rooms: 1,
-      rate: 1800,
-      nights: 14,
-      hsnSac: "996311",
-      gstRate: 12,
-    },
-  ]);
+  const [items, setItems] = useState(
+    initialData?.items?.map(item => ({
+      id: item.id,
+      description: item.description,
+      rooms: item.rooms,
+      rate: item.rate,
+      nights: item.nights,
+      hsnSac: item.hsn_sac,
+      gstRate: item.gst_rate,
+    })) || [
+      {
+        id: 1,
+        description:
+          "Room No. 204 from 23rd February 2025 and Checkout on 9th March 2025 - Grand Royale Palms Benaulim, Goa",
+        rooms: 1,
+        rate: 1800,
+        nights: 14,
+        hsnSac: "996311",
+        gstRate: 12,
+      },
+    ]
+  );
 
   const [notes, setNotes] = useState(
-    "The payment has to be made on arrival at the property. The booking is non cancellable and non-amendable."
+    initialData?.notes || "The payment has to be made on arrival at the property. The booking is non cancellable and non-amendable."
   );
 
   const [terms, setTerms] = useState(
-    `1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to GOA Jurisdiction only.`
+    initialData?.terms || `1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to GOA Jurisdiction only.`
   );
 
   const total = items.reduce(
@@ -145,6 +170,93 @@ export default function QuotationGenerator() {
   };
 
   const removeItem = (id: number) => setItems((prev) => prev.filter((it) => it.id !== id));
+
+  // Save bill to Supabase
+  const saveBill = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+
+    try {
+      const billData: Omit<Bill, 'id' | 'created_at' | 'updated_at'> = {
+        invoice_type: invoiceType,
+        
+        // Company information
+        company_name: company.name,
+        company_address: company.address,
+        company_gstin: company.gstin,
+        company_email: company.email,
+        company_mobile: company.mobile,
+        
+        // Document metadata
+        document_title: meta.title,
+        document_type: meta.documentType,
+        document_number: meta.quotationNo,
+        dated: meta.dated,
+        arrival: meta.arrival,
+        departure: meta.departure,
+        place_of_supply: meta.placeOfSupply,
+        terms_of_payment: meta.termsOfPayment,
+        
+        // Client information
+        client_bill_to: client.billTo,
+        client_company_name: client.companyName || undefined,
+        client_address: client.address || undefined,
+        client_gst_number: client.gstNumber || undefined,
+        client_phone_number: client.phoneNumber || undefined,
+        client_email: client.email || undefined,
+        
+        // Items
+        items: items.map(item => ({
+          id: item.id,
+          description: item.description,
+          rooms: item.rooms,
+          rate: item.rate,
+          nights: item.nights,
+          hsn_sac: item.hsnSac,
+          gst_rate: item.gstRate
+        })),
+        
+        // Additional information
+        notes: notes,
+        terms: terms,
+        
+        // Calculated totals
+        total_amount: total,
+        total_gst_amount: invoiceType === 'tax-invoice' ? totalGstAmount : undefined,
+        grand_total: invoiceType === 'tax-invoice' ? grandTotal : total
+      };
+
+      if (mode === 'edit' && billId) {
+        // Update existing bill
+        await BillService.updateBill(billId, billData);
+        setSaveMessage('✅ Bill updated successfully! Redirecting...');
+        
+        // Redirect to bill detail page after 2 seconds
+        setTimeout(() => {
+          window.location.href = `/bills/${billId}`;
+        }, 2000);
+      } else {
+        // Create new bill
+        await BillService.saveBill(billData);
+        setSaveMessage('✅ Bill saved successfully! Showing preview...');
+        
+        // Show invoice preview after saving
+        setTimeout(() => {
+          setFormVisible(false);
+          setSaveMessage('');
+        }, 1500);
+      }
+      
+    } catch (error) {
+      console.error('Error saving bill:', error);
+      setSaveMessage(`❌ Failed to ${mode === 'edit' ? 'update' : 'save'} bill. Please try again.`);
+      
+      // Clear error message after 5 seconds
+      setTimeout(() => setSaveMessage(''), 5000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Auto-update title and document type based on invoice type
   useEffect(() => {
@@ -653,14 +765,31 @@ export default function QuotationGenerator() {
                 </div>
               </div>
 
-              {/* Generate Button */}
-              <div className="pt-4 border-t border-gray-200">
-                <button 
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl" 
-                  onClick={() => setFormVisible(false)}
-                >
-                  🚀 Generate Invoice
-                </button>
+              {/* Save and Generate Buttons */}
+              <div className="pt-4 border-t border-gray-200 space-y-3">
+                {/* Save Message */}
+                {saveMessage && (
+                  <div className={`text-center text-sm font-medium px-4 py-2 rounded-lg ${
+                    saveMessage.includes('✅') 
+                      ? 'bg-green-100 text-green-800 border border-green-200' 
+                      : 'bg-red-100 text-red-800 border border-red-200'
+                  }`}>
+                    {saveMessage}
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-1 gap-3">
+                  <button 
+                    className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed" 
+                    onClick={saveBill}
+                    disabled={isSaving}
+                  >
+                    {isSaving 
+                      ? (mode === 'edit' ? '💾 Updating...' : '💾 Saving...') 
+                      : (mode === 'edit' ? '💾 Update Bill' : '💾 Save & Generate Bill')
+                    }
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -898,9 +1027,20 @@ export default function QuotationGenerator() {
 
         <div className="text-center text-xs py-1 border-t border-gray-300">This is a Computer Generated Invoice</div>
 
-         <div className="p-2 text-center space-x-2 print:hidden no-print border-t border-gray-300">
-           <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={() => setFormVisible(true)}>Back to Edit</button>
-           <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={downloadPDF} disabled={isExporting}>{isExporting ? "Preparing PDF..." : "Download PDF"}</button>
+         <div className="p-4 text-center space-x-3 print:hidden no-print border-t border-gray-300 bg-gray-50">
+           <button 
+             className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-lg" 
+             onClick={() => setFormVisible(true)}
+           >
+             ✏️ Back to Edit
+           </button>
+           <button 
+             className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition-all duration-200 shadow-lg" 
+             onClick={downloadPDF} 
+             disabled={isExporting}
+           >
+             {isExporting ? "⏳ Preparing PDF..." : "📄 Download PDF"}
+           </button>
          </div>
       </div>
     </div>
