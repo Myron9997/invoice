@@ -165,6 +165,21 @@ export default function BillDetail() {
     )
   }
 
+  // Compute per-item GST breakdown for tax invoices
+  const itemsWithGst = bill.items.map(item => {
+    const itemTotal = Number(item.rooms || 0) * Number(item.rate || 0) * Number(item.nights || 0)
+    const itemGstRate = Number(item.gst_rate || 0)
+    const itemCgstRate = itemGstRate / 2
+    const itemSgstRate = itemGstRate / 2
+    const itemCgstAmount = (itemTotal * itemCgstRate) / 100
+    const itemSgstAmount = (itemTotal * itemSgstRate) / 100
+    const itemGstTotal = itemCgstAmount + itemSgstAmount
+    return { ...item, itemTotal, itemCgstRate, itemSgstRate, itemCgstAmount, itemSgstAmount, itemGstTotal }
+  })
+  const totalCgstAmount = itemsWithGst.reduce((sum, it) => sum + it.itemCgstAmount, 0)
+  const totalSgstAmount = itemsWithGst.reduce((sum, it) => sum + it.itemSgstAmount, 0)
+  const totalGstAmount = totalCgstAmount + totalSgstAmount
+
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       {/* Header */}
@@ -266,6 +281,8 @@ export default function BillDetail() {
             </tbody>
           </table>
 
+          
+
           <table className="quotation-table w-full border-t border-gray-300">
             <tbody>
               <tr>
@@ -325,7 +342,7 @@ export default function BillDetail() {
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">CGST</td>
                     <td className="quotation-cell text-xs text-center">-</td>
-                    <td className="quotation-cell text-xs text-center">6.0%</td>
+                    <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / bill.total_amount) * 100) / 2).toFixed(1)}%</td>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-right">₹{(bill.total_gst_amount / 2).toLocaleString("en-IN")}</td>
                     <td className="quotation-cell text-xs text-center">-</td>
@@ -335,7 +352,7 @@ export default function BillDetail() {
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">SGST</td>
                     <td className="quotation-cell text-xs text-center">-</td>
-                    <td className="quotation-cell text-xs text-center">6.0%</td>
+                    <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / bill.total_amount) * 100) / 2).toFixed(1)}%</td>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-right">₹{(bill.total_gst_amount / 2).toLocaleString("en-IN")}</td>
                     <td className="quotation-cell text-xs text-center">-</td>
@@ -355,11 +372,62 @@ export default function BillDetail() {
               <tr>
                 <td className="quotation-cell text-xs">
                   <div className="font-semibold text-sm">Amount Chargeable (in words)</div>
-                  <div className="italic">Indian Rupee {numberToWords(bill.grand_total || bill.total_amount)}</div>
+                  <div className="italic">{
+                    (() => {
+                      const effectiveGrandTotal = bill.invoice_type === 'tax-invoice'
+                        ? Math.round((bill.grand_total != null ? bill.grand_total : (bill.total_amount + (bill.total_gst_amount || 0))))
+                        : bill.total_amount
+                      return `Indian Rupee ${numberToWords(effectiveGrandTotal)}`
+                    })()
+                  }</div>
                 </td>
               </tr>
             </tbody>
           </table>
+
+          {bill.invoice_type === 'tax-invoice' && (
+            <table className="quotation-table w-full border-t border-gray-300">
+              <thead>
+                <tr>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Sr. No.</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>HSN/SAC</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '15%' }}>Taxable Value</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Central Tax Rate</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>Central Tax Amount</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>State Tax Rate</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '12%' }}>State Tax Amount</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Integrated Tax Rate</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '11%' }}>Total Tax Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsWithGst.map((it, idx) => (
+                  <tr key={it.id}>
+                    <td className="quotation-cell text-center text-xs">{idx + 1}</td>
+                    <td className="quotation-cell text-center text-xs">{it.hsn_sac}</td>
+                    <td className="quotation-cell text-right text-xs">₹{it.itemTotal.toLocaleString('en-IN')}</td>
+                    <td className="quotation-cell text-center text-xs">{it.itemCgstRate.toFixed(1)}%</td>
+                    <td className="quotation-cell text-right text-xs">₹{it.itemCgstAmount.toLocaleString('en-IN')}</td>
+                    <td className="quotation-cell text-center text-xs">{it.itemSgstRate.toFixed(1)}%</td>
+                    <td className="quotation-cell text-right text-xs">₹{it.itemSgstAmount.toLocaleString('en-IN')}</td>
+                    <td className="quotation-cell text-center text-xs">-</td>
+                    <td className="quotation-cell text-right text-xs font-semibold">₹{it.itemGstTotal.toLocaleString('en-IN')}</td>
+                  </tr>
+                ))}
+                <tr className="bg-gray-50">
+                  <td className="quotation-cell text-center text-xs font-bold">Total</td>
+                  <td className="quotation-cell text-center text-xs font-bold">-</td>
+                  <td className="quotation-cell text-right text-xs font-bold">₹{bill.total_amount.toLocaleString('en-IN')}</td>
+                  <td className="quotation-cell text-center text-xs font-bold">-</td>
+                  <td className="quotation-cell text-right text-xs font-bold">₹{totalCgstAmount.toLocaleString('en-IN')}</td>
+                  <td className="quotation-cell text-center text-xs font-bold">-</td>
+                  <td className="quotation-cell text-right text-xs font-bold">₹{totalSgstAmount.toLocaleString('en-IN')}</td>
+                  <td className="quotation-cell text-center text-xs font-bold">-</td>
+                  <td className="quotation-cell text-right text-xs font-bold">₹{totalGstAmount.toLocaleString('en-IN')}</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
 
           <table className="quotation-table w-full border-t border-gray-300">
             <tbody>
