@@ -35,6 +35,10 @@ export default function QuotationGenerator({
     mobile: initialData?.company_mobile || "9552433413",
   });
 
+  const [letterHead, setLetterHead] = useState(
+    initialData?.letter_head || ""
+  );
+
   const [meta, setMeta] = useState({
     title: initialData?.document_title || "QUOTATION",
     documentType: initialData?.document_type || "Quotation No.",
@@ -86,35 +90,51 @@ export default function QuotationGenerator({
     initialData?.terms || `1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to GOA Jurisdiction only.`
   );
 
+  const [discount, setDiscount] = useState(
+    initialData?.discount || 0
+  );
+
   const total = items.reduce(
     (s, it) => s + Number(it.rooms || 0) * Number(it.rate || 0) * Number(it.nights || 0),
     0
   );
 
-  // GST calculations - calculate GST for each item separately
+  // Apply discount before GST (discount is a percentage)
+  const discountPercentage = Number(discount || 0);
+  const discountAmount = (total * discountPercentage) / 100;
+  const subtotalAfterDiscount = total - discountAmount;
+
+  // GST calculations - calculate GST on discounted amount for each item proportionally
   const itemsWithGst = items.map(item => {
     const itemTotal = Number(item.rooms || 0) * Number(item.rate || 0) * Number(item.nights || 0);
     const itemGstRate = Number(item.gstRate || 0);
     const itemCgstRate = itemGstRate / 2;
     const itemSgstRate = itemGstRate / 2;
-    const itemCgstAmount = (itemTotal * itemCgstRate) / 100;
-    const itemSgstAmount = (itemTotal * itemSgstRate) / 100;
+    
+    // Apply discount proportionally to each item
+    const itemDiscount = total > 0 ? (itemTotal / total) * discountAmount : 0;
+    const itemSubtotalAfterDiscount = itemTotal - itemDiscount;
+    
+    const itemCgstAmount = (itemSubtotalAfterDiscount * itemCgstRate) / 100;
+    const itemSgstAmount = (itemSubtotalAfterDiscount * itemSgstRate) / 100;
     const itemGstTotal = itemCgstAmount + itemSgstAmount;
     
     return {
       ...item,
       itemTotal,
+      itemDiscount,
+      itemSubtotalAfterDiscount,
       itemCgstAmount,
       itemSgstAmount,
       itemGstTotal
     };
   });
 
-  // Calculate total GST amounts
+  // Calculate total GST amounts on discounted subtotal
   const totalCgstAmount = itemsWithGst.reduce((sum, item) => sum + item.itemCgstAmount, 0);
   const totalSgstAmount = itemsWithGst.reduce((sum, item) => sum + item.itemSgstAmount, 0);
   const totalGstAmount = totalCgstAmount + totalSgstAmount;
-  const grandTotal = total + totalGstAmount;
+  const grandTotal = subtotalAfterDiscount + totalGstAmount;
 
   // For display purposes, use average GST rate
   const avgGstRate = items.length > 0 ? items.reduce((sum, item) => sum + Number(item.gstRate || 0), 0) / items.length : 12;
@@ -188,6 +208,7 @@ export default function QuotationGenerator({
         company_mobile: company.mobile,
         
         // Document metadata
+        letter_head: letterHead || undefined,
         document_title: meta.title,
         document_type: meta.documentType,
         document_number: meta.quotationNo,
@@ -222,8 +243,9 @@ export default function QuotationGenerator({
         
         // Calculated totals
         total_amount: total,
+        discount: discountPercentage > 0 ? discountPercentage : undefined,
         total_gst_amount: invoiceType === 'tax-invoice' ? totalGstAmount : undefined,
-        grand_total: invoiceType === 'tax-invoice' ? grandTotal : total
+        grand_total: invoiceType === 'tax-invoice' ? grandTotal : (discountPercentage > 0 ? subtotalAfterDiscount : total)
       };
 
       if (mode === 'edit' && billId) {
@@ -297,7 +319,7 @@ export default function QuotationGenerator({
       // Apply A4-optimized styles
       element.style.width = "190mm"; // Slightly less than A4 width to account for margins
       element.style.maxWidth = "190mm";
-      element.style.padding = "10mm";
+      element.style.padding = "5mm"; // Reduced padding for better fit
       element.style.margin = "0";
 
       // Hide all buttons during PDF export
@@ -323,15 +345,16 @@ export default function QuotationGenerator({
       await new Promise((res) => setTimeout(res, 200));
 
       const opt = {
-        margin: [10, 10, 10, 10], // Top, Right, Bottom, Left margins in mm
+        margin: [5, 5, 5, 5], // Top, Right, Bottom, Left margins in mm (reduced for better fit)
         filename: `${meta.title}-${meta.quotationNo || "NA"}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { 
-          scale: 1.5, // Reduced scale to prevent overflow
+          scale: 1.2, // Reduced scale to fit better on one page
           useCORS: true,
           letterRendering: true,
           width: 190 * 3.7795275591, // Convert mm to pixels for html2canvas
-          height: element.scrollHeight
+          height: element.scrollHeight,
+          windowWidth: 190 * 3.7795275591
         },
         jsPDF: { 
           unit: "mm", 
@@ -476,6 +499,17 @@ export default function QuotationGenerator({
                     <span className="text-green-600 font-semibold text-sm">📝</span>
                   </div>
                   <h3 className="text-lg font-semibold text-gray-900">Document Details</h3>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Letter Head (Company Name Header)</label>
+                  <input 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                    placeholder="Enter company name for header (e.g., PARK GRAND HOSPITALITY)" 
+                    value={letterHead} 
+                    onChange={(e) => setLetterHead(e.target.value)} 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This will appear above the document title in bold, larger text</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -732,6 +766,36 @@ export default function QuotationGenerator({
                 ))}
               </div>
 
+              {/* Discount */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+                    <span className="text-red-600 font-semibold text-sm">💰</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Discount</h3>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bill Discount (%)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white text-sm" 
+                    placeholder="Enter discount percentage (e.g., 5 for 5%)" 
+                    value={discount || ''} 
+                    onChange={(e) => setDiscount(Number(e.target.value || 0))} 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Discount will be applied before GST calculation. Example: 5% discount on ₹18,700 = ₹935</p>
+                  {discount > 0 && total > 0 && (
+                    <p className="text-xs text-blue-600 mt-1 font-medium">
+                      Discount Amount: ₹{((total * discount) / 100).toLocaleString("en-IN")} (on ₹{total.toLocaleString("en-IN")})
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {/* Notes & Terms */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 mb-3">
@@ -801,7 +865,13 @@ export default function QuotationGenerator({
   // Invoice preview
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex justify-center">
-      <div className="w-full max-w-4xl bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box" ref={invoiceRef}>
+      <div className="w-full max-w-4xl" ref={invoiceRef}>
+        {letterHead && (
+          <div className="text-center pb-2 font-bold text-lg mb-2" style={{ paddingTop: '8px', paddingBottom: '8px' }}>
+            {letterHead}
+          </div>
+        )}
+        <div className="bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box">
          <div className="text-center pb-2 border-b border-gray-300 font-bold text-base" style={{ marginTop: '0', paddingTop: '0' }}>
            {meta.title}
          </div>
@@ -909,6 +979,18 @@ export default function QuotationGenerator({
               <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
               <td className="quotation-cell text-right font-semibold text-xs">₹{total.toLocaleString("en-IN")}</td>
             </tr>
+            {discountPercentage > 0 && (
+              <tr>
+                <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right text-xs">Discount ({discountPercentage}%)</td>
+                <td className="quotation-cell text-right text-xs">-₹{discountAmount.toLocaleString("en-IN")}</td>
+              </tr>
+            )}
+            {discountPercentage > 0 && (
+              <tr className="bg-gray-50">
+                <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
+                <td className="quotation-cell text-right font-semibold text-xs">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
+              </tr>
+            )}
             {invoiceType === 'tax-invoice' && (
               <>
                  <tr>
@@ -919,7 +1001,7 @@ export default function QuotationGenerator({
                    <td className="quotation-cell text-xs text-center">-</td>
                    <td className="quotation-cell text-xs text-right">₹{totalCgstAmount.toLocaleString("en-IN")}</td>
                    <td className="quotation-cell text-xs text-center">-</td>
-                   <td className="quotation-cell text-xs text-right">₹{(total + totalCgstAmount).toLocaleString("en-IN")}</td>
+                   <td className="quotation-cell text-xs text-right">₹{(subtotalAfterDiscount + totalCgstAmount).toLocaleString("en-IN")}</td>
                  </tr>
                  <tr>
                    <td className="quotation-cell text-xs text-center">-</td>
@@ -945,7 +1027,7 @@ export default function QuotationGenerator({
             <tr>
               <td className="quotation-cell text-xs">
                 <div className="font-semibold text-sm">Amount Chargeable (in words)</div>
-                <div className="italic">Indian Rupee {numberToWords(invoiceType === 'tax-invoice' ? grandTotal : total)}</div>
+                <div className="italic">Indian Rupee {numberToWords(invoiceType === 'tax-invoice' ? grandTotal : (discountPercentage > 0 ? subtotalAfterDiscount : total))}</div>
               </td>
             </tr>
           </tbody>
@@ -971,7 +1053,7 @@ export default function QuotationGenerator({
                 <tr key={it.id}>
                   <td className="quotation-cell text-center text-xs">{idx + 1}</td>
                   <td className="quotation-cell text-center text-xs">{it.hsnSac}</td>
-                  <td className="quotation-cell text-right text-xs">₹{it.itemTotal.toLocaleString("en-IN")}</td>
+                  <td className="quotation-cell text-right text-xs">₹{it.itemSubtotalAfterDiscount.toLocaleString("en-IN")}</td>
                   <td className="quotation-cell text-center text-xs">{it.itemCgstAmount > 0 ? (it.gstRate / 2).toFixed(1) : 0}%</td>
                   <td className="quotation-cell text-right text-xs">₹{it.itemCgstAmount.toLocaleString("en-IN")}</td>
                   <td className="quotation-cell text-center text-xs">{it.itemSgstAmount > 0 ? (it.gstRate / 2).toFixed(1) : 0}%</td>
@@ -983,7 +1065,7 @@ export default function QuotationGenerator({
               <tr className="bg-gray-50">
                 <td className="quotation-cell text-center text-xs font-bold">Total</td>
                 <td className="quotation-cell text-center text-xs font-bold">-</td>
-                <td className="quotation-cell text-right text-xs font-bold">₹{total.toLocaleString("en-IN")}</td>
+                <td className="quotation-cell text-right text-xs font-bold">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
                 <td className="quotation-cell text-center text-xs font-bold">-</td>
                 <td className="quotation-cell text-right text-xs font-bold">₹{totalCgstAmount.toLocaleString("en-IN")}</td>
                 <td className="quotation-cell text-center text-xs font-bold">-</td>
@@ -1026,6 +1108,7 @@ export default function QuotationGenerator({
          </table>
 
         <div className="text-center text-xs py-1 border-t border-gray-300">This is a Computer Generated Invoice</div>
+        </div>
 
          <div className="p-4 text-center space-x-3 print:hidden no-print border-t border-gray-300 bg-gray-50">
            <button 

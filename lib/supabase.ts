@@ -20,6 +20,7 @@ export interface Bill {
   company_mobile: string
   
   // Document metadata
+  letter_head?: string
   document_title: string
   document_type: string
   document_number: string
@@ -54,6 +55,7 @@ export interface Bill {
   
   // Calculated totals
   total_amount: number
+  discount?: number
   total_gst_amount?: number
   grand_total?: number
 }

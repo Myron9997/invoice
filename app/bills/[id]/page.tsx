@@ -53,16 +53,40 @@ export default function BillDetail() {
         throw new Error("html2pdf.js module did not expose the expected function.")
       }
 
+      // Store original styles
+      const originalStyles = {
+        width: element.style.width,
+        maxWidth: element.style.maxWidth,
+        padding: element.style.padding,
+        margin: element.style.margin,
+      }
+
+      // Apply A4-optimized styles
+      element.style.width = "190mm"
+      element.style.maxWidth = "190mm"
+      element.style.padding = "5mm"
+      element.style.margin = "0"
+
+      // Hide all buttons during PDF export
+      const buttons = element.querySelectorAll('button')
+      buttons.forEach(button => {
+        button.style.display = 'none'
+      })
+
+      // Small pause to ensure styles/layout settle
+      await new Promise((res) => setTimeout(res, 200))
+
       const opt = {
-        margin: [10, 10, 10, 10],
+        margin: [5, 5, 5, 5],
         filename: `${bill?.document_title}-${bill?.document_number}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { 
-          scale: 1.5,
+          scale: 1.2,
           useCORS: true,
           letterRendering: true,
           width: 190 * 3.7795275591,
-          height: element.scrollHeight
+          height: element.scrollHeight,
+          windowWidth: 190 * 3.7795275591
         },
         jsPDF: { 
           unit: "mm", 
@@ -78,6 +102,17 @@ export default function BillDetail() {
       if (res && typeof res.then === "function") {
         await res
       }
+
+      // Restore original styles
+      element.style.width = originalStyles.width || ""
+      element.style.maxWidth = originalStyles.maxWidth || ""
+      element.style.padding = originalStyles.padding || ""
+      element.style.margin = originalStyles.margin || ""
+
+      // Restore button visibility
+      buttons.forEach(button => {
+        button.style.display = ''
+      })
 
     } catch (err) {
       console.error("PDF export error:", err)
@@ -165,16 +200,26 @@ export default function BillDetail() {
     )
   }
 
-  // Compute per-item GST breakdown for tax invoices
+  // Apply discount before GST (discount is a percentage)
+  const discountPercentage = Number(bill.discount || 0)
+  const discountAmount = (bill.total_amount * discountPercentage) / 100
+  const subtotalAfterDiscount = bill.total_amount - discountAmount
+
+  // Compute per-item GST breakdown for tax invoices (with discount applied proportionally)
   const itemsWithGst = bill.items.map(item => {
     const itemTotal = Number(item.rooms || 0) * Number(item.rate || 0) * Number(item.nights || 0)
     const itemGstRate = Number(item.gst_rate || 0)
     const itemCgstRate = itemGstRate / 2
     const itemSgstRate = itemGstRate / 2
-    const itemCgstAmount = (itemTotal * itemCgstRate) / 100
-    const itemSgstAmount = (itemTotal * itemSgstRate) / 100
+    
+    // Apply discount proportionally to each item
+    const itemDiscount = bill.total_amount > 0 ? (itemTotal / bill.total_amount) * discountAmount : 0
+    const itemSubtotalAfterDiscount = itemTotal - itemDiscount
+    
+    const itemCgstAmount = (itemSubtotalAfterDiscount * itemCgstRate) / 100
+    const itemSgstAmount = (itemSubtotalAfterDiscount * itemSgstRate) / 100
     const itemGstTotal = itemCgstAmount + itemSgstAmount
-    return { ...item, itemTotal, itemCgstRate, itemSgstRate, itemCgstAmount, itemSgstAmount, itemGstTotal }
+    return { ...item, itemTotal, itemDiscount, itemSubtotalAfterDiscount, itemCgstRate, itemSgstRate, itemCgstAmount, itemSgstAmount, itemGstTotal }
   })
   const totalCgstAmount = itemsWithGst.reduce((sum, it) => sum + it.itemCgstAmount, 0)
   const totalSgstAmount = itemsWithGst.reduce((sum, it) => sum + it.itemSgstAmount, 0)
@@ -226,7 +271,13 @@ export default function BillDetail() {
 
       {/* Bill Preview */}
       <div className="flex justify-center">
-        <div className="w-full max-w-4xl bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box" id="bill-preview">
+        <div className="w-full max-w-4xl" id="bill-preview">
+          {bill.letter_head && (
+            <div className="text-center pb-2 font-bold text-lg mb-2" style={{ paddingTop: '8px', paddingBottom: '8px' }}>
+              {bill.letter_head}
+            </div>
+          )}
+          <div className="bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box">
           <div className="text-center pb-2 border-b border-gray-300 font-bold text-base" style={{ marginTop: '0', paddingTop: '0' }}>
             {bill.document_title}
           </div>
@@ -336,23 +387,35 @@ export default function BillDetail() {
                 <td colSpan={bill.invoice_type === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
                 <td className="quotation-cell text-right font-semibold text-xs">₹{bill.total_amount.toLocaleString("en-IN")}</td>
               </tr>
+              {discountPercentage > 0 && (
+                <tr>
+                  <td colSpan={bill.invoice_type === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right text-xs">Discount ({discountPercentage}%)</td>
+                  <td className="quotation-cell text-right text-xs">-₹{discountAmount.toLocaleString("en-IN")}</td>
+                </tr>
+              )}
+              {discountPercentage > 0 && (
+                <tr className="bg-gray-50">
+                  <td colSpan={bill.invoice_type === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
+                  <td className="quotation-cell text-right font-semibold text-xs">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
+                </tr>
+              )}
               {bill.invoice_type === 'tax-invoice' && bill.total_gst_amount && bill.grand_total && (
                 <>
                   <tr>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">CGST</td>
                     <td className="quotation-cell text-xs text-center">-</td>
-                    <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / bill.total_amount) * 100) / 2).toFixed(1)}%</td>
+                    <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / (subtotalAfterDiscount || bill.total_amount)) * 100) / 2).toFixed(1)}%</td>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-right">₹{(bill.total_gst_amount / 2).toLocaleString("en-IN")}</td>
                     <td className="quotation-cell text-xs text-center">-</td>
-                    <td className="quotation-cell text-xs text-right">₹{(bill.total_amount + bill.total_gst_amount / 2).toLocaleString("en-IN")}</td>
+                    <td className="quotation-cell text-xs text-right">₹{(subtotalAfterDiscount + bill.total_gst_amount / 2).toLocaleString("en-IN")}</td>
                   </tr>
                   <tr>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">SGST</td>
                     <td className="quotation-cell text-xs text-center">-</td>
-                    <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / bill.total_amount) * 100) / 2).toFixed(1)}%</td>
+                    <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / (subtotalAfterDiscount || bill.total_amount)) * 100) / 2).toFixed(1)}%</td>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-right">₹{(bill.total_gst_amount / 2).toLocaleString("en-IN")}</td>
                     <td className="quotation-cell text-xs text-center">-</td>
@@ -405,7 +468,7 @@ export default function BillDetail() {
                   <tr key={it.id}>
                     <td className="quotation-cell text-center text-xs">{idx + 1}</td>
                     <td className="quotation-cell text-center text-xs">{it.hsn_sac}</td>
-                    <td className="quotation-cell text-right text-xs">₹{it.itemTotal.toLocaleString('en-IN')}</td>
+                    <td className="quotation-cell text-right text-xs">₹{it.itemSubtotalAfterDiscount.toLocaleString('en-IN')}</td>
                     <td className="quotation-cell text-center text-xs">{it.itemCgstRate.toFixed(1)}%</td>
                     <td className="quotation-cell text-right text-xs">₹{it.itemCgstAmount.toLocaleString('en-IN')}</td>
                     <td className="quotation-cell text-center text-xs">{it.itemSgstRate.toFixed(1)}%</td>
@@ -417,7 +480,7 @@ export default function BillDetail() {
                 <tr className="bg-gray-50">
                   <td className="quotation-cell text-center text-xs font-bold">Total</td>
                   <td className="quotation-cell text-center text-xs font-bold">-</td>
-                  <td className="quotation-cell text-right text-xs font-bold">₹{bill.total_amount.toLocaleString('en-IN')}</td>
+                  <td className="quotation-cell text-right text-xs font-bold">₹{subtotalAfterDiscount.toLocaleString('en-IN')}</td>
                   <td className="quotation-cell text-center text-xs font-bold">-</td>
                   <td className="quotation-cell text-right text-xs font-bold">₹{totalCgstAmount.toLocaleString('en-IN')}</td>
                   <td className="quotation-cell text-center text-xs font-bold">-</td>
@@ -460,6 +523,7 @@ export default function BillDetail() {
           </table>
 
           <div className="text-center text-xs py-1 border-t border-gray-300">This is a Computer Generated Invoice</div>
+          </div>
         </div>
       </div>
     </div>
