@@ -42,11 +42,13 @@ export interface Bill {
   items: Array<{
     id: number
     description: string
+    room_type?: string
     rooms: number
     rate: number
     nights: number
     hsn_sac: string
     gst_rate: number
+    custom_fields?: Record<string, string> // Dynamic custom fields like { "FTO": "12345", "License": "ABC123" }
   }>
   
   // Additional information

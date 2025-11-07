@@ -63,21 +63,25 @@ export default function QuotationGenerator({
     initialData?.items?.map(item => ({
       id: item.id,
       description: item.description,
+      roomType: item.room_type || "",
       rooms: item.rooms,
       rate: item.rate,
       nights: item.nights,
       hsnSac: item.hsn_sac,
       gstRate: item.gst_rate,
+      customFields: item.custom_fields || {},
     })) || [
       {
         id: 1,
         description:
           "Room No. 204 from 23rd February 2025 and Checkout on 9th March 2025 - Grand Royale Palms Benaulim, Goa",
+        roomType: "",
         rooms: 1,
         rate: 1800,
         nights: 14,
         hsnSac: "996311",
         gstRate: 12,
+        customFields: {},
       },
     ]
   );
@@ -181,7 +185,7 @@ export default function QuotationGenerator({
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      { id: Date.now(), description: "", rooms: 1, rate: 0, nights: 1, hsnSac: "", gstRate: 12 },
+      { id: Date.now(), description: "", roomType: "", rooms: 1, rate: 0, nights: 1, hsnSac: "", gstRate: 12, customFields: {} },
     ]);
   };
 
@@ -190,6 +194,66 @@ export default function QuotationGenerator({
   };
 
   const removeItem = (id: number) => setItems((prev) => prev.filter((it) => it.id !== id));
+
+  // Custom fields management
+  const addCustomFieldToItem = (itemId: number, fieldName: string) => {
+    const trimmedName = fieldName.trim();
+    if (!trimmedName) return;
+    
+    setItems((prev) => prev.map((it) => {
+      if (it.id === itemId) {
+        // Check if field already exists
+        if (it.customFields && it.customFields[trimmedName] !== undefined) {
+          return it; // Field already exists, don't add duplicate
+        }
+        return { 
+          ...it, 
+          customFields: { ...it.customFields, [trimmedName]: "" } 
+        };
+      }
+      return it;
+    }));
+  };
+
+  const updateCustomField = (itemId: number, fieldName: string, value: string) => {
+    setItems((prev) => prev.map((it) => 
+      it.id === itemId 
+        ? { ...it, customFields: { ...it.customFields, [fieldName]: value } }
+        : it
+    ));
+  };
+
+  const removeCustomFieldFromItem = (itemId: number, fieldName: string) => {
+    setItems((prev) => prev.map((it) => {
+      if (it.id === itemId) {
+        const newCustomFields = { ...it.customFields };
+        delete newCustomFields[fieldName];
+        return { ...it, customFields: newCustomFields };
+      }
+      return it;
+    }));
+  };
+
+  // Get all unique custom field names across all items
+  const getAllCustomFieldNames = () => {
+    const fieldNames = new Set<string>();
+    items.forEach(item => {
+      Object.keys(item.customFields || {}).forEach(key => {
+        if (item.customFields[key] && item.customFields[key].trim() !== '') {
+          fieldNames.add(key);
+        }
+      });
+    });
+    return Array.from(fieldNames);
+  };
+
+  // Calculate total columns for colspan
+  const getTotalColumns = () => {
+    const baseColumns = invoiceType === 'tax-invoice' ? 7 : 5; // Sl No, Description, HSN/SAC, GST Rate (if tax), Rooms, Rate, Nights
+    const roomTypeColumn = items.some(it => it.roomType && it.roomType.trim() !== '') ? 1 : 0;
+    const customFieldColumns = getAllCustomFieldNames().length;
+    return baseColumns + roomTypeColumn + customFieldColumns;
+  };
 
   // Save bill to Supabase
   const saveBill = async () => {
@@ -230,11 +294,17 @@ export default function QuotationGenerator({
         items: items.map(item => ({
           id: item.id,
           description: item.description,
+          room_type: item.roomType || undefined,
           rooms: item.rooms,
           rate: item.rate,
           nights: item.nights,
           hsn_sac: item.hsnSac,
-          gst_rate: item.gstRate
+          gst_rate: item.gstRate,
+          custom_fields: Object.keys(item.customFields || {}).length > 0 
+            ? Object.fromEntries(
+                Object.entries(item.customFields || {}).filter(([_, value]) => value && value.trim() !== '')
+              )
+            : undefined
         })),
         
         // Additional information
@@ -317,9 +387,9 @@ export default function QuotationGenerator({
       };
 
       // Apply A4-optimized styles
-      element.style.width = "190mm"; // Slightly less than A4 width to account for margins
-      element.style.maxWidth = "190mm";
-      element.style.padding = "5mm"; // Reduced padding for better fit
+      element.style.width = "196mm"; // A4 width (210mm) - margins (2mm each side)
+      element.style.maxWidth = "196mm";
+      element.style.padding = "3mm"; // Reduced padding for better fit
       element.style.margin = "0";
 
       // Hide all buttons during PDF export
@@ -345,16 +415,17 @@ export default function QuotationGenerator({
       await new Promise((res) => setTimeout(res, 200));
 
       const opt = {
-        margin: [5, 5, 5, 5], // Top, Right, Bottom, Left margins in mm (reduced for better fit)
+        margin: [2, 2, 2, 2], // Top, Right, Bottom, Left margins in mm (reduced for better fit)
         filename: `${meta.title}-${meta.quotationNo || "NA"}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { 
-          scale: 1.2, // Reduced scale to fit better on one page
+          scale: 1.5, // Increased scale for better quality
           useCORS: true,
           letterRendering: true,
-          width: 190 * 3.7795275591, // Convert mm to pixels for html2canvas
+          width: 196 * 3.7795275591, // Convert mm to pixels for html2canvas (196mm content width)
           height: element.scrollHeight,
-          windowWidth: 190 * 3.7795275591
+          windowWidth: 196 * 3.7795275591,
+          logging: false
         },
         jsPDF: { 
           unit: "mm", 
@@ -362,7 +433,12 @@ export default function QuotationGenerator({
           orientation: "portrait",
           compress: true
         },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        pagebreak: { 
+          mode: ['avoid-all', 'css', 'legacy'],
+          avoid: ['tr', 'td', 'table'],
+          before: '.page-break-before',
+          after: '.page-break-after'
+        }
       };
 
       // Call the library
@@ -706,6 +782,17 @@ export default function QuotationGenerator({
                         />
                       </div>
                       
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Room Type</label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-sm"
+                          value={it.roomType || ""}
+                          onChange={(e) => updateItem(it.id, "roomType", e.target.value)}
+                          placeholder="e.g., Single, Double, Triple, Suite, Deluxe"
+                        />
+                      </div>
+                      
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">HSN/SAC Code</label>
@@ -760,6 +847,78 @@ export default function QuotationGenerator({
                             placeholder="Enter number of nights"
                           />
                         </div>
+                      </div>
+
+                      {/* Custom Fields Section */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">Custom Fields</label>
+                        
+                        {/* Add New Field Input */}
+                        <div className="flex gap-2 items-center mb-3">
+                          <input
+                            type="text"
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                            placeholder="Enter field name (e.g., FTO, License, etc.)"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const input = e.currentTarget as HTMLInputElement;
+                                const fieldName = input.value.trim();
+                                if (fieldName) {
+                                  addCustomFieldToItem(it.id, fieldName);
+                                  input.value = '';
+                                }
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const fieldName = e.target.value.trim();
+                              if (fieldName) {
+                                addCustomFieldToItem(it.id, fieldName);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                              const fieldName = input.value.trim();
+                              if (fieldName) {
+                                addCustomFieldToItem(it.id, fieldName);
+                                input.value = '';
+                              }
+                            }}
+                            className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors whitespace-nowrap"
+                          >
+                            + Add Field
+                          </button>
+                        </div>
+
+                        {/* Existing Custom Fields */}
+                        {it.customFields && Object.keys(it.customFields).length > 0 && (
+                          <div className="space-y-2">
+                            {Object.keys(it.customFields).map((fieldName) => (
+                              <div key={fieldName} className="flex gap-2 items-center">
+                                <label className="text-xs font-medium text-gray-600 w-24 flex-shrink-0">{fieldName}:</label>
+                                <input
+                                  type="text"
+                                  className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  value={it.customFields[fieldName] || ""}
+                                  onChange={(e) => updateCustomField(it.id, fieldName, e.target.value)}
+                                  placeholder={`Enter ${fieldName} value`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeCustomFieldFromItem(it.id, fieldName)}
+                                  className="text-red-600 hover:text-red-800 text-xs px-2 flex-shrink-0"
+                                  title="Remove field"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -944,50 +1103,68 @@ export default function QuotationGenerator({
         <table className="quotation-table w-full border border-gray-300">
           <thead>
             <tr>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '6%' }}>Sl No</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-left" style={{ width: '35%' }}>Description of Goods/Services</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '5%' }}>Sl No</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-left" style={{ width: '30%' }}>Description of Goods/Services</th>
+              {items.some(it => it.roomType && it.roomType.trim() !== '') && (
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Room Type</th>
+              )}
+              {getAllCustomFieldNames().map(fieldName => (
+                <th key={fieldName} className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>{fieldName}</th>
+              ))}
               {invoiceType === 'tax-invoice' && (
                 <>
-                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>HSN/SAC</th>
-                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '6%' }}>GST Rate</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '7%' }}>HSN/SAC</th>
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '5%' }}>GST Rate</th>
                 </>
               )}
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Rooms</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Rate</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Nights</th>
-              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Amount</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '7%' }}>Rooms</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '9%' }}>Rate</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '7%' }}>Nights</th>
+              <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '9%' }}>Amount</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((it, idx) => (
-              <tr key={it.id}>
-                <td className="quotation-cell text-center text-xs">{idx + 1}</td>
-                <td className="quotation-cell text-left text-xs break-words">{it.description}</td>
-                {invoiceType === 'tax-invoice' && (
-                  <>
-                    <td className="quotation-cell text-center text-xs">{it.hsnSac}</td>
-                    <td className="quotation-cell text-center text-xs">{it.gstRate}%</td>
-                  </>
-                )}
-                <td className="quotation-cell text-center text-xs">{it.rooms}</td>
-                <td className="quotation-cell text-right text-xs">₹{Number(it.rate).toLocaleString("en-IN")}</td>
-                <td className="quotation-cell text-center text-xs">{it.nights}</td>
-                <td className="quotation-cell text-right text-xs font-semibold">₹{(it.rooms * it.rate * it.nights).toLocaleString("en-IN")}</td>
-              </tr>
-            ))}
+            {items.map((it, idx) => {
+              const hasRoomType = items.some(item => item.roomType && item.roomType.trim() !== '')
+              const customFieldNames = getAllCustomFieldNames()
+              return (
+                <tr key={it.id}>
+                  <td className="quotation-cell text-center text-xs">{idx + 1}</td>
+                  <td className="quotation-cell text-left text-xs break-words">{it.description}</td>
+                  {hasRoomType && (
+                    <td className="quotation-cell text-center text-xs">{it.roomType && it.roomType.trim() !== '' ? it.roomType : '-'}</td>
+                  )}
+                  {customFieldNames.map(fieldName => (
+                    <td key={fieldName} className="quotation-cell text-center text-xs">
+                      {it.customFields?.[fieldName] && it.customFields[fieldName].trim() !== '' ? it.customFields[fieldName] : '-'}
+                    </td>
+                  ))}
+                  {invoiceType === 'tax-invoice' && (
+                    <>
+                      <td className="quotation-cell text-center text-xs">{it.hsnSac}</td>
+                      <td className="quotation-cell text-center text-xs">{it.gstRate}%</td>
+                    </>
+                  )}
+                  <td className="quotation-cell text-center text-xs">{it.rooms}</td>
+                  <td className="quotation-cell text-right text-xs">₹{Number(it.rate).toLocaleString("en-IN")}</td>
+                  <td className="quotation-cell text-center text-xs">{it.nights}</td>
+                  <td className="quotation-cell text-right text-xs font-semibold">₹{(it.rooms * it.rate * it.nights).toLocaleString("en-IN")}</td>
+                </tr>
+              )
+            })}
             <tr className="bg-gray-50">
-              <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
+              <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
               <td className="quotation-cell text-right font-semibold text-xs">₹{total.toLocaleString("en-IN")}</td>
             </tr>
             {discountPercentage > 0 && (
               <tr>
-                <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right text-xs">Discount ({discountPercentage}%)</td>
+                <td colSpan={getTotalColumns()} className="quotation-cell text-right text-xs">Discount ({discountPercentage}%)</td>
                 <td className="quotation-cell text-right text-xs">-₹{discountAmount.toLocaleString("en-IN")}</td>
               </tr>
             )}
             {discountPercentage > 0 && (
               <tr className="bg-gray-50">
-                <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
+                <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
                 <td className="quotation-cell text-right font-semibold text-xs">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
               </tr>
             )}
@@ -996,6 +1173,12 @@ export default function QuotationGenerator({
                  <tr>
                    <td className="quotation-cell text-xs text-center">-</td>
                    <td className="quotation-cell text-xs text-center">CGST</td>
+                   {items.some(it => it.roomType && it.roomType.trim() !== '') && (
+                     <td className="quotation-cell text-xs text-center">-</td>
+                   )}
+                   {getAllCustomFieldNames().map(() => (
+                     <td key={Math.random()} className="quotation-cell text-xs text-center">-</td>
+                   ))}
                    <td className="quotation-cell text-xs text-center">-</td>
                    <td className="quotation-cell text-xs text-center">{cgstRate.toFixed(1)}%</td>
                    <td className="quotation-cell text-xs text-center">-</td>
@@ -1006,6 +1189,12 @@ export default function QuotationGenerator({
                  <tr>
                    <td className="quotation-cell text-xs text-center">-</td>
                    <td className="quotation-cell text-xs text-center">SGST</td>
+                   {items.some(it => it.roomType && it.roomType.trim() !== '') && (
+                     <td className="quotation-cell text-xs text-center">-</td>
+                   )}
+                   {getAllCustomFieldNames().map(() => (
+                     <td key={Math.random()} className="quotation-cell text-xs text-center">-</td>
+                   ))}
                    <td className="quotation-cell text-xs text-center">-</td>
                    <td className="quotation-cell text-xs text-center">{sgstRate.toFixed(1)}%</td>
                    <td className="quotation-cell text-xs text-center">-</td>
@@ -1014,7 +1203,7 @@ export default function QuotationGenerator({
                    <td className="quotation-cell text-xs text-right">₹{grandTotal.toLocaleString("en-IN")}</td>
                  </tr>
                  <tr className="bg-gray-50">
-                   <td colSpan={invoiceType === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">G. Total</td>
+                   <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">G. Total</td>
                    <td className="quotation-cell text-right font-semibold text-sm">₹{grandTotal.toLocaleString("en-IN")}</td>
                  </tr>
               </>

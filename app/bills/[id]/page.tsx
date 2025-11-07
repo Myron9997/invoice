@@ -62,9 +62,9 @@ export default function BillDetail() {
       }
 
       // Apply A4-optimized styles
-      element.style.width = "190mm"
-      element.style.maxWidth = "190mm"
-      element.style.padding = "5mm"
+      element.style.width = "196mm" // A4 width (210mm) - margins (2mm each side)
+      element.style.maxWidth = "196mm"
+      element.style.padding = "3mm" // Reduced padding for better fit
       element.style.margin = "0"
 
       // Hide all buttons during PDF export
@@ -77,16 +77,17 @@ export default function BillDetail() {
       await new Promise((res) => setTimeout(res, 200))
 
       const opt = {
-        margin: [5, 5, 5, 5],
+        margin: [2, 2, 2, 2],
         filename: `${bill?.document_title}-${bill?.document_number}.pdf`,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { 
-          scale: 1.2,
+          scale: 1.5,
           useCORS: true,
           letterRendering: true,
-          width: 190 * 3.7795275591,
+          width: 196 * 3.7795275591, // Convert mm to pixels for html2canvas (196mm content width)
           height: element.scrollHeight,
-          windowWidth: 190 * 3.7795275591
+          windowWidth: 196 * 3.7795275591,
+          logging: false
         },
         jsPDF: { 
           unit: "mm", 
@@ -94,7 +95,12 @@ export default function BillDetail() {
           orientation: "portrait",
           compress: true
         },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        pagebreak: { 
+          mode: ['avoid-all', 'css', 'legacy'],
+          avoid: ['tr', 'td', 'table'],
+          before: '.page-break-before',
+          after: '.page-break-after'
+        }
       }
 
       const worker = html2pdfFn().set(opt).from(element)
@@ -169,6 +175,31 @@ export default function BillDetail() {
       return inWords(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + inWords(n % 10000000) : "")
     }
     return inWords(num) + " only"
+  }
+
+  // Get all unique custom field names across all items
+  const getAllCustomFieldNames = () => {
+    if (!bill) return []
+    const fieldNames = new Set<string>()
+    bill.items.forEach(item => {
+      if (item.custom_fields) {
+        Object.keys(item.custom_fields).forEach(key => {
+          if (item.custom_fields?.[key] && item.custom_fields[key].trim() !== '') {
+            fieldNames.add(key)
+          }
+        })
+      }
+    })
+    return Array.from(fieldNames)
+  }
+
+  // Calculate total columns for colspan
+  const getTotalColumns = () => {
+    if (!bill) return 0
+    const baseColumns = bill.invoice_type === 'tax-invoice' ? 7 : 5
+    const roomTypeColumn = bill.items.some(item => item.room_type && item.room_type.trim() !== '') ? 1 : 0
+    const customFieldColumns = getAllCustomFieldNames().length
+    return baseColumns + roomTypeColumn + customFieldColumns
   }
 
   if (loading) {
@@ -352,50 +383,89 @@ export default function BillDetail() {
           <table className="quotation-table w-full border border-gray-300">
             <thead>
               <tr>
-                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '6%' }}>Sl No</th>
-                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-left" style={{ width: '35%' }}>Description of Goods/Services</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '5%' }}>Sl No</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-left" style={{ width: '30%' }}>Description of Goods/Services</th>
+                {bill.items.some(item => item.room_type && item.room_type.trim() !== '') && (
+                  <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Room Type</th>
+                )}
+                {(() => {
+                  const customFieldNames = new Set<string>();
+                  bill.items.forEach(item => {
+                    if (item.custom_fields) {
+                      Object.keys(item.custom_fields).forEach(key => {
+                        if (item.custom_fields?.[key] && item.custom_fields[key].trim() !== '') {
+                          customFieldNames.add(key);
+                        }
+                      });
+                    }
+                  });
+                  return Array.from(customFieldNames).map(fieldName => (
+                    <th key={fieldName} className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>{fieldName}</th>
+                  ));
+                })()}
                 {bill.invoice_type === 'tax-invoice' && (
                   <>
-                    <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>HSN/SAC</th>
-                    <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '6%' }}>GST Rate</th>
+                    <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '7%' }}>HSN/SAC</th>
+                    <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '5%' }}>GST Rate</th>
                   </>
                 )}
-                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Rooms</th>
-                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Rate</th>
-                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '8%' }}>Nights</th>
-                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '10%' }}>Amount</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '7%' }}>Rooms</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '9%' }}>Rate</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '7%' }}>Nights</th>
+                <th className="quotation-cell text-xs font-semibold bg-gray-50 text-center" style={{ width: '9%' }}>Amount</th>
               </tr>
             </thead>
             <tbody>
-              {bill.items.map((item, idx) => (
-                <tr key={item.id}>
-                  <td className="quotation-cell text-center text-xs">{idx + 1}</td>
-                  <td className="quotation-cell text-left text-xs break-words">{item.description}</td>
-                  {bill.invoice_type === 'tax-invoice' && (
-                    <>
-                      <td className="quotation-cell text-center text-xs">{item.hsn_sac}</td>
-                      <td className="quotation-cell text-center text-xs">{item.gst_rate}%</td>
-                    </>
-                  )}
-                  <td className="quotation-cell text-center text-xs">{item.rooms}</td>
-                  <td className="quotation-cell text-right text-xs">₹{Number(item.rate).toLocaleString("en-IN")}</td>
-                  <td className="quotation-cell text-center text-xs">{item.nights}</td>
-                  <td className="quotation-cell text-right text-xs font-semibold">₹{(item.rooms * item.rate * item.nights).toLocaleString("en-IN")}</td>
-                </tr>
-              ))}
+              {bill.items.map((item, idx) => {
+                const hasRoomType = bill.items.some(it => it.room_type && it.room_type.trim() !== '')
+                const customFieldNames = new Set<string>();
+                bill.items.forEach(it => {
+                  if (it.custom_fields) {
+                    Object.keys(it.custom_fields).forEach(key => {
+                      if (it.custom_fields?.[key] && it.custom_fields[key].trim() !== '') {
+                        customFieldNames.add(key);
+                      }
+                    });
+                  }
+                });
+                return (
+                  <tr key={item.id}>
+                    <td className="quotation-cell text-center text-xs">{idx + 1}</td>
+                    <td className="quotation-cell text-left text-xs break-words">{item.description}</td>
+                    {hasRoomType && (
+                      <td className="quotation-cell text-center text-xs">{item.room_type && item.room_type.trim() !== '' ? item.room_type : '-'}</td>
+                    )}
+                    {Array.from(customFieldNames).map(fieldName => (
+                      <td key={fieldName} className="quotation-cell text-center text-xs">
+                        {item.custom_fields?.[fieldName] && item.custom_fields[fieldName].trim() !== '' ? item.custom_fields[fieldName] : '-'}
+                      </td>
+                    ))}
+                    {bill.invoice_type === 'tax-invoice' && (
+                      <>
+                        <td className="quotation-cell text-center text-xs">{item.hsn_sac}</td>
+                        <td className="quotation-cell text-center text-xs">{item.gst_rate}%</td>
+                      </>
+                    )}
+                    <td className="quotation-cell text-center text-xs">{item.rooms}</td>
+                    <td className="quotation-cell text-right text-xs">₹{Number(item.rate).toLocaleString("en-IN")}</td>
+                    <td className="quotation-cell text-center text-xs">{item.nights}</td>
+                    <td className="quotation-cell text-right text-xs font-semibold">₹{(item.rooms * item.rate * item.nights).toLocaleString("en-IN")}</td>
+                  </tr>
+                )
+              })}
               <tr className="bg-gray-50">
-                <td colSpan={bill.invoice_type === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
+                <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Total Amount</td>
                 <td className="quotation-cell text-right font-semibold text-xs">₹{bill.total_amount.toLocaleString("en-IN")}</td>
               </tr>
               {discountPercentage > 0 && (
                 <tr>
-                  <td colSpan={bill.invoice_type === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right text-xs">Discount ({discountPercentage}%)</td>
+                  <td colSpan={getTotalColumns()} className="quotation-cell text-right text-xs">Discount ({discountPercentage}%)</td>
                   <td className="quotation-cell text-right text-xs">-₹{discountAmount.toLocaleString("en-IN")}</td>
                 </tr>
               )}
               {discountPercentage > 0 && (
                 <tr className="bg-gray-50">
-                  <td colSpan={bill.invoice_type === 'tax-invoice' ? 7 : 5} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
+                  <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
                   <td className="quotation-cell text-right font-semibold text-xs">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
                 </tr>
               )}
@@ -404,6 +474,12 @@ export default function BillDetail() {
                   <tr>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">CGST</td>
+                    {bill.items.some(item => item.room_type && item.room_type.trim() !== '') && (
+                      <td className="quotation-cell text-xs text-center">-</td>
+                    )}
+                    {getAllCustomFieldNames().map(() => (
+                      <td key={Math.random()} className="quotation-cell text-xs text-center">-</td>
+                    ))}
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / (subtotalAfterDiscount || bill.total_amount)) * 100) / 2).toFixed(1)}%</td>
                     <td className="quotation-cell text-xs text-center">-</td>
@@ -414,6 +490,12 @@ export default function BillDetail() {
                   <tr>
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">SGST</td>
+                    {bill.items.some(item => item.room_type && item.room_type.trim() !== '') && (
+                      <td className="quotation-cell text-xs text-center">-</td>
+                    )}
+                    {getAllCustomFieldNames().map(() => (
+                      <td key={Math.random()} className="quotation-cell text-xs text-center">-</td>
+                    ))}
                     <td className="quotation-cell text-xs text-center">-</td>
                     <td className="quotation-cell text-xs text-center">{(((bill.total_gst_amount / (subtotalAfterDiscount || bill.total_amount)) * 100) / 2).toFixed(1)}%</td>
                     <td className="quotation-cell text-xs text-center">-</td>
@@ -422,7 +504,7 @@ export default function BillDetail() {
                     <td className="quotation-cell text-xs text-right">₹{bill.grand_total.toLocaleString("en-IN")}</td>
                   </tr>
                   <tr className="bg-gray-50">
-                    <td colSpan={7} className="quotation-cell text-right font-semibold text-xs">G. Total</td>
+                    <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">G. Total</td>
                     <td className="quotation-cell text-right font-semibold text-sm">₹{bill.grand_total.toLocaleString("en-IN")}</td>
                   </tr>
                 </>
