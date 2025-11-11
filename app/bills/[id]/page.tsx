@@ -59,13 +59,35 @@ export default function BillDetail() {
         maxWidth: element.style.maxWidth,
         padding: element.style.padding,
         margin: element.style.margin,
+        overflow: element.style.overflow,
+        height: element.style.height,
+        maxHeight: element.style.maxHeight,
+      }
+      
+      let parent: HTMLElement | null = null
+      let originalParentStyles: { height: string; maxHeight: string; overflow: string } | null = null
+
+      // Remove any height restrictions from parent containers
+      parent = element.parentElement
+      if (parent) {
+        originalParentStyles = {
+          height: parent.style.height,
+          maxHeight: parent.style.maxHeight,
+          overflow: parent.style.overflow
+        }
+        parent.style.height = 'auto'
+        parent.style.maxHeight = 'none'
+        parent.style.overflow = 'visible'
       }
 
       // Apply A4-optimized styles
-      element.style.width = "196mm" // A4 width (210mm) - margins (2mm each side)
-      element.style.maxWidth = "196mm"
-      element.style.padding = "3mm" // Reduced padding for better fit
+      element.style.width = "200mm" // A4 width (210mm) - margins (5mm each side)
+      element.style.maxWidth = "200mm"
+      element.style.padding = "2mm" // Minimal padding for better fit
       element.style.margin = "0"
+      element.style.overflow = "visible" // Ensure all content is visible
+      element.style.height = "auto" // Ensure height is auto
+      element.style.maxHeight = "none" // Remove max-height restrictions
 
       // Hide all buttons during PDF export
       const buttons = element.querySelectorAll('button')
@@ -73,21 +95,111 @@ export default function BillDetail() {
         button.style.display = 'none'
       })
 
+      // Add CSS to prevent table row breaks and remove gaps
+      const style = document.createElement('style')
+      style.id = 'pdf-export-styles'
+      style.textContent = `
+        @media print {
+          @page {
+            size: A4;
+            margin: 5mm;
+          }
+          table { page-break-inside: auto !important; }
+          tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+          thead { display: table-header-group !important; }
+          tfoot { display: table-footer-group !important; }
+          tbody tr { page-break-inside: avoid !important; }
+        }
+        .quotation-table tr { page-break-inside: avoid !important; }
+        .quotation-table thead { display: table-header-group !important; }
+        .quotation-table tbody tr { page-break-inside: avoid !important; }
+        #bill-preview, [id*="bill-preview"] { 
+          overflow: visible !important; 
+          height: auto !important; 
+          max-height: none !important; 
+          page-break-inside: avoid !important;
+        }
+        .no-page-break {
+          page-break-after: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        .quotation-box {
+          page-break-before: avoid !important;
+        }
+        body, html { overflow: visible !important; height: auto !important; }
+      `
+      document.head.appendChild(style)
+
+      // Force a reflow to ensure all content is measured
+      void element.offsetHeight
+      
+      // Calculate content width (don't constrain height - let html2pdf handle page breaks)
+      const contentWidth = 200 * 3.7795275591 // Convert mm to pixels (200mm = usable width)
+      
       // Small pause to ensure styles/layout settle
-      await new Promise((res) => setTimeout(res, 200))
+      await new Promise((res) => setTimeout(res, 500))
+
+      // A4 dimensions: 210mm x 297mm
+      // With 5mm margins on all sides: 200mm x 287mm usable area
+      const marginTop = 5
+      const marginBottom = 5
+      const marginLeft = 5
+      const marginRight = 5
 
       const opt = {
-        margin: [2, 2, 2, 2],
+        margin: [marginTop, marginRight, marginBottom, marginLeft], // Top, Right, Bottom, Left margins in mm
         filename: `${bill?.document_title}-${bill?.document_number}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
+        image: { type: "jpeg", quality: 0.95 },
         html2canvas: { 
-          scale: 1.5,
+          scale: 0.98, // Slightly reduce scale to ensure content fits
           useCORS: true,
           letterRendering: true,
-          width: 196 * 3.7795275591, // Convert mm to pixels for html2canvas (196mm content width)
-          height: element.scrollHeight,
-          windowWidth: 196 * 3.7795275591,
-          logging: false
+          width: contentWidth,
+          // Don't specify height - let html2canvas capture full content naturally
+          windowWidth: contentWidth,
+          logging: false,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDoc: Document) => {
+            // Ensure cloned document has proper styles
+            const clonedElement = clonedDoc.getElementById('bill-preview')
+            if (clonedElement) {
+              const htmlEl = clonedElement as HTMLElement
+              htmlEl.style.width = "200mm"
+              htmlEl.style.maxWidth = "200mm"
+              htmlEl.style.height = "auto"
+              htmlEl.style.maxHeight = "none"
+              htmlEl.style.overflow = "visible"
+              htmlEl.style.padding = "2mm"
+              htmlEl.style.margin = "0"
+              htmlEl.style.pageBreakInside = "avoid"
+            }
+            // Keep letter head and main box together
+            const letterHead = clonedDoc.querySelector('.no-page-break')
+            if (letterHead) {
+              const letterEl = letterHead as HTMLElement
+              letterEl.style.pageBreakAfter = "avoid"
+              letterEl.style.pageBreakInside = "avoid"
+            }
+            const quotationBox = clonedDoc.querySelector('.quotation-box')
+            if (quotationBox) {
+              const boxEl = quotationBox as HTMLElement
+              boxEl.style.pageBreakBefore = "avoid"
+            }
+            // Ensure all tables in cloned doc have proper styles
+            const tables = clonedDoc.querySelectorAll('.quotation-table')
+            tables.forEach(table => {
+              const tableEl = table as HTMLElement
+              tableEl.style.pageBreakInside = "auto"
+            })
+            const rows = clonedDoc.querySelectorAll('.quotation-table tr')
+            rows.forEach(row => {
+              const rowEl = row as HTMLElement
+              rowEl.style.pageBreakInside = "avoid"
+            })
+          }
         },
         jsPDF: { 
           unit: "mm", 
@@ -97,10 +209,11 @@ export default function BillDetail() {
         },
         pagebreak: { 
           mode: ['avoid-all', 'css', 'legacy'],
-          avoid: ['tr', 'td', 'table'],
+          avoid: ['.quotation-table tr'],
           before: '.page-break-before',
           after: '.page-break-after'
-        }
+        },
+        enableLinks: false
       }
 
       const worker = html2pdfFn().set(opt).from(element)
@@ -114,6 +227,16 @@ export default function BillDetail() {
       element.style.maxWidth = originalStyles.maxWidth || ""
       element.style.padding = originalStyles.padding || ""
       element.style.margin = originalStyles.margin || ""
+      element.style.overflow = ""
+      element.style.height = ""
+      element.style.maxHeight = ""
+
+      // Restore parent styles if modified
+      if (parent && originalParentStyles) {
+        parent.style.height = originalParentStyles.height || ""
+        parent.style.maxHeight = originalParentStyles.maxHeight || ""
+        parent.style.overflow = originalParentStyles.overflow || ""
+      }
 
       // Restore button visibility
       buttons.forEach(button => {
@@ -125,6 +248,12 @@ export default function BillDetail() {
       const errorMessage = err instanceof Error ? err.message : "Unknown error"
       alert("Failed to generate PDF. See console for details. " + errorMessage)
     } finally {
+      // Remove the style we added
+      const addedStyle = document.getElementById('pdf-export-styles')
+      if (addedStyle) {
+        document.head.removeChild(addedStyle)
+      }
+      
       setIsExporting(false)
     }
   }
@@ -302,13 +431,13 @@ export default function BillDetail() {
 
       {/* Bill Preview */}
       <div className="flex justify-center">
-        <div className="w-full max-w-4xl" id="bill-preview">
+        <div className="w-full max-w-4xl" id="bill-preview" style={{ pageBreakInside: 'avoid' }}>
+          <div className="bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box" style={{ pageBreakBefore: 'avoid', pageBreakInside: 'auto' }}>
           {bill.letter_head && (
-            <div className="text-center pb-2 font-bold text-lg mb-2" style={{ paddingTop: '8px', paddingBottom: '8px' }}>
+            <div className="text-center pb-2 font-bold text-lg" style={{ paddingTop: '8px', paddingBottom: '8px' }}>
               {bill.letter_head}
             </div>
           )}
-          <div className="bg-white border-2 border-gray-400 text-sm print:w-[210mm] print:max-w-none quotation-box">
           <div className="text-center pb-2 border-b border-gray-300 font-bold text-base" style={{ marginTop: '0', paddingTop: '0' }}>
             {bill.document_title}
           </div>
@@ -366,6 +495,10 @@ export default function BillDetail() {
           
 
           <table className="quotation-table w-full border-t border-gray-300">
+            <colgroup>
+              <col style={{ width: '50%' }} />
+              <col style={{ width: '50%' }} />
+            </colgroup>
             <tbody>
               <tr>
                 <td className="quotation-cell text-xs w-full">
@@ -574,36 +707,30 @@ export default function BillDetail() {
             </table>
           )}
 
-          <table className="quotation-table w-full border-t border-gray-300">
+          <table className="quotation-table w-full border-t border-gray-300" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '50%' }} />
+              <col style={{ width: '50%' }} />
+            </colgroup>
             <tbody>
               <tr>
-                <td className="quotation-cell border-r border-gray-300 text-xs w-1/2">
+                <td className="quotation-cell text-xs" colSpan={2} style={{ padding: '4px 6px' }}>
                   <strong>NOTES</strong>
                   <div className="mt-1 whitespace-pre-wrap">{bill.notes}</div>
                 </td>
-                <td className="quotation-cell text-xs w-1/2 text-right">
-                  For {bill.company_name}
-                </td>
               </tr>
-            </tbody>
-          </table>
-
-          <table className="quotation-table w-full border-t border-gray-300">
-            <tbody>
               <tr>
-                <td className="quotation-cell border-r border-gray-300 text-xs w-1/2" style={{ padding: '4px 6px' }}>
+                <td className="quotation-cell border-r border-gray-300 text-xs" style={{ padding: '4px 6px', verticalAlign: 'top', boxSizing: 'border-box' }}>
                   <strong>TERMS AND CONDITIONS</strong>
                   <div className="mt-1 whitespace-pre-wrap">{bill.terms}</div>
                 </td>
-                <td className="quotation-cell text-xs w-1/2 text-center font-bold" style={{ paddingTop: '100px', paddingBottom: '100px', paddingLeft: '6px', paddingRight: '6px', minHeight: '200px', height: '200px' }}>
-                  <div style={{ marginTop: '10px', marginBottom: '40px' }}>
-                    Authorised Signatory
-                  </div>
+                <td className="quotation-cell text-xs text-center font-bold" style={{ padding: '6px', minHeight: '200px', height: '200px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', boxSizing: 'border-box' }}>
+                  Authorised Signatory
                 </td>
               </tr>
             </tbody>
           </table>
-
+ 
           <div className="text-center text-xs py-1 border-t border-gray-300">This is a Computer Generated Invoice</div>
           </div>
         </div>

@@ -106,4 +106,66 @@ body {
   .quotation-table {
     border-collapse: collapse !important;
   }
+  
+  /* Prevent table row breaks across pages */
+  .quotation-table tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+  
+  .quotation-table thead {
+    display: table-header-group !important;
+  }
+  
+  .quotation-table tbody tr {
+    page-break-inside: avoid !important;
+  }
+  
+  /* Ensure seamless page breaks - allow tables to break but not rows */
+  table {
+    page-break-inside: auto !important;
+  }
+  
+  /* Ensure first page is filled before moving to next */
+  .quotation-box {
+    page-break-before: auto !important;
+  }
+  
+  /* Add page break hints for better control */
+  .quotation-table tbody tr:first-child {
+    page-break-before: auto !important;
+  }
+  
+  /* Ensure proper spacing at page boundaries */
+  @page {
+    size: A4;
+    margin: 5mm;
+  }
+  
+  /* Reduce gaps between pages for seamless flow */
+  .quotation-table {
+    margin: 0 !important;
+  }
+  
+  .quotation-box {
+    margin: 0 !important;
+    padding: 2mm !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Ensure containers don't cut content */
+  #bill-preview,
+  [id*="bill-preview"],
+  [ref*="invoiceRef"] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Ensure proper spacing only where needed */
+  .quotation-cell {
+    padding: 4px 6px !important;
+  }
 }
