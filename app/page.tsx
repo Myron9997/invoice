@@ -1,7 +1,11 @@
 'use client'
 
-import QuotationGenerator from '@/components/QuotationGenerator'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
+
+const QuotationGenerator = dynamic(() => import('@/components/QuotationGenerator'), {
+  ssr: false,
+})
 
 export default function Home() {
   return (
