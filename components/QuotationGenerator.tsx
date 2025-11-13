@@ -1410,9 +1410,13 @@ export default function QuotationGenerator({
           </colgroup>
           <tbody>
             <tr>
-              <td className="quotation-cell text-xs" colSpan={2} style={{ padding: '4px 6px' }}>
+              <td className="quotation-cell border-r border-gray-300 text-xs" style={{ padding: '4px 6px', verticalAlign: 'top', boxSizing: 'border-box' }}>
                 <strong>NOTES</strong>
                 <div className="mt-1 whitespace-pre-wrap">{notes}</div>
+              </td>
+              <td className="quotation-cell text-xs text-center font-bold" style={{ padding: '4px 6px', verticalAlign: 'top', boxSizing: 'border-box' }}>
+                <strong>For</strong>
+                <div className="mt-1">{company.name}</div>
               </td>
             </tr>
             <tr>
