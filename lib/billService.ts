@@ -18,9 +18,14 @@ export class BillService {
 
   // Update an existing bill
   static async updateBill(id: string, bill: Partial<Bill>): Promise<Bill> {
+    // Filter out undefined values to ensure only defined fields (including empty strings) are updated
+    const updateData = Object.fromEntries(
+      Object.entries(bill).filter(([_, value]) => value !== undefined)
+    ) as Partial<Bill>
+    
     const { data, error } = await supabase
       .from('bills')
-      .update({ ...bill, updated_at: new Date().toISOString() })
+      .update({ ...updateData, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single()

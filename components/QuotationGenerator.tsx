@@ -354,11 +354,23 @@ export default function QuotationGenerator({
         
         // Client information
         client_bill_to: client.billTo,
-        client_company_name: client.companyName || undefined,
-        client_address: client.address || undefined,
-        client_gst_number: client.gstNumber || undefined,
-        client_phone_number: client.phoneNumber || undefined,
-        client_email: client.email || undefined,
+        // For optional fields, explicitly handle empty strings to ensure they're saved/cleared in the database
+        // If trimmed value is empty, pass empty string (not undefined) so Supabase will update/clear the field
+        client_company_name: client.companyName !== undefined 
+          ? (client.companyName.trim() ? client.companyName.trim() : '') 
+          : undefined,
+        client_address: client.address !== undefined 
+          ? (client.address.trim() ? client.address.trim() : '') 
+          : undefined,
+        client_gst_number: client.gstNumber !== undefined 
+          ? (client.gstNumber.trim() ? client.gstNumber.trim() : '') 
+          : undefined,
+        client_phone_number: client.phoneNumber !== undefined 
+          ? (client.phoneNumber.trim() ? client.phoneNumber.trim() : '') 
+          : undefined,
+        client_email: client.email !== undefined 
+          ? (client.email.trim() ? client.email.trim() : '') 
+          : undefined,
         
         // Items
         items: items.map(item => ({
