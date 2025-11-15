@@ -598,7 +598,7 @@ export default function BillDetail() {
               )}
               {discountPercentage > 0 && (
                 <tr className="bg-gray-50">
-                  <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
+                  <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Total After Discount</td>
                   <td className="quotation-cell text-right font-semibold text-xs">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
                 </tr>
               )}
@@ -648,13 +648,15 @@ export default function BillDetail() {
           <table className="quotation-table w-full border-t border-gray-300">
             <tbody>
               <tr>
-                <td className="quotation-cell text-xs">
+                <td className="quotation-cell text-xs text-right">
                   <div className="font-semibold text-sm">Amount Chargeable (in words)</div>
                   <div className="italic">{
                     (() => {
+                      // For tax invoices: use grand_total (already includes discount and GST)
+                      // For regular invoices: use subtotalAfterDiscount if discount exists, otherwise total_amount
                       const effectiveGrandTotal = bill.invoice_type === 'tax-invoice'
                         ? Math.round((bill.grand_total != null ? bill.grand_total : (bill.total_amount + (bill.total_gst_amount || 0))))
-                        : bill.total_amount
+                        : (discountPercentage > 0 ? Math.round(subtotalAfterDiscount) : Math.round(bill.total_amount))
                       return `Indian Rupee ${numberToWords(effectiveGrandTotal)}`
                     })()
                   }</div>

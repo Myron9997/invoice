@@ -1301,7 +1301,7 @@ export default function QuotationGenerator({
             )}
             {discountPercentage > 0 && (
               <tr className="bg-gray-50">
-                <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Subtotal After Discount</td>
+                <td colSpan={getTotalColumns()} className="quotation-cell text-right font-semibold text-xs">Total After Discount</td>
                 <td className="quotation-cell text-right font-semibold text-xs">₹{subtotalAfterDiscount.toLocaleString("en-IN")}</td>
               </tr>
             )}
@@ -1351,7 +1351,7 @@ export default function QuotationGenerator({
         <table className="quotation-table w-full border-t border-gray-300">
           <tbody>
             <tr>
-              <td className="quotation-cell text-xs">
+              <td className="quotation-cell text-xs text-right">
                 <div className="font-semibold text-sm">Amount Chargeable (in words)</div>
                 <div className="italic">Indian Rupee {numberToWords(invoiceType === 'tax-invoice' ? grandTotal : (discountPercentage > 0 ? subtotalAfterDiscount : total))}</div>
               </td>
