@@ -717,8 +717,12 @@ export default function BillDetail() {
             <tbody>
               <tr>
                 <td className="quotation-cell border-r border-gray-300 text-xs" style={{ padding: '4px 6px', verticalAlign: 'top', boxSizing: 'border-box' }}>
-                  <strong>NOTES</strong>
-                  <div className="mt-1 whitespace-pre-wrap">{bill.notes}</div>
+                  {bill.notes && bill.notes.trim() && (
+                    <>
+                      <strong>NOTES</strong>
+                      <div className="mt-1 whitespace-pre-wrap">{bill.notes}</div>
+                    </>
+                  )}
                 </td>
                 <td className="quotation-cell text-xs text-center font-bold" style={{ padding: '4px 6px', verticalAlign: 'top', boxSizing: 'border-box' }}>
                   <strong>For</strong>
@@ -727,8 +731,12 @@ export default function BillDetail() {
               </tr>
               <tr>
                 <td className="quotation-cell border-r border-gray-300 text-xs" style={{ padding: '4px 6px', verticalAlign: 'top', boxSizing: 'border-box' }}>
-                  <strong>TERMS AND CONDITIONS</strong>
-                  <div className="mt-1 whitespace-pre-wrap">{bill.terms}</div>
+                  {bill.terms && bill.terms.trim() && (
+                    <>
+                      <strong>TERMS AND CONDITIONS</strong>
+                      <div className="mt-1 whitespace-pre-wrap">{bill.terms}</div>
+                    </>
+                  )}
                 </td>
                 <td className="quotation-cell text-xs text-center font-bold" style={{ padding: '6px', minHeight: '200px', height: '200px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', boxSizing: 'border-box' }}>
                   Authorised Signatory
