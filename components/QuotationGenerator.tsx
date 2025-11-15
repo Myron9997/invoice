@@ -20,7 +20,9 @@ export default function QuotationGenerator({
   billId 
 }: QuotationGeneratorProps) {
   const [formVisible, setFormVisible] = useState(true);
-  const [invoiceType, setInvoiceType] = useState<'invoice' | 'tax-invoice'>('invoice');
+  const [invoiceType, setInvoiceType] = useState<'invoice' | 'tax-invoice'>(
+    initialData?.invoice_type || 'invoice'
+  );
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -97,6 +99,74 @@ export default function QuotationGenerator({
   const [discount, setDiscount] = useState(
     initialData?.discount || 0
   );
+
+  // Update state when initialData changes (important for edit mode)
+  useEffect(() => {
+    if (initialData) {
+      // Update invoice type
+      if (initialData.invoice_type) {
+        setInvoiceType(initialData.invoice_type);
+      }
+
+      // Update company information - use actual values from backend, only fallback to defaults if undefined
+      setCompany({
+        name: initialData.company_name ?? "PARK GRAND HOSPITALITY",
+        address: initialData.company_address ?? "H.No: 708 A, Ascona Cana, Benaulim, South-Goa, Goa 403717",
+        gstin: initialData.company_gstin ?? "30ACEPL2168C1Z8",
+        email: initialData.company_email ?? "sots.parkgrand@gmail.com",
+        mobile: initialData.company_mobile ?? "9552433413",
+      });
+
+      // Update letter head - preserve empty strings
+      setLetterHead(initialData.letter_head ?? "");
+
+      // Update document metadata - use actual values from backend
+      setMeta({
+        title: initialData.document_title ?? "QUOTATION",
+        documentType: initialData.document_type ?? "Quotation No.",
+        quotationNo: initialData.document_number ?? "02",
+        dated: initialData.dated ?? "08/02/2025",
+        arrival: initialData.arrival ?? "23/02/2025",
+        departure: initialData.departure ?? "09/03/2025",
+        placeOfSupply: initialData.place_of_supply ?? "Goa",
+        termsOfPayment: initialData.terms_of_payment ?? "On Arrival",
+      });
+
+      // Update client information - preserve empty strings
+      setClient({
+        billTo: initialData.client_bill_to ?? "Mikhail & Elena Medvedeva",
+        companyName: initialData.client_company_name ?? "",
+        address: initialData.client_address ?? "",
+        gstNumber: initialData.client_gst_number ?? "",
+        phoneNumber: initialData.client_phone_number ?? "9204511935",
+        email: initialData.client_email ?? "",
+      });
+
+      // Update items - use exact data from backend
+      if (initialData.items && initialData.items.length > 0) {
+        setItems(
+          initialData.items.map(item => ({
+            id: item.id,
+            description: item.description,
+            roomType: item.room_type ?? "",
+            rooms: item.rooms,
+            rate: item.rate,
+            nights: item.nights,
+            hsnSac: item.hsn_sac,
+            gstRate: item.gst_rate,
+            customFields: item.custom_fields ?? {},
+          }))
+        );
+      }
+
+      // Update notes and terms - use actual values from backend
+      setNotes(initialData.notes ?? "The payment has to be made on arrival at the property. The booking is non cancellable and non-amendable.");
+      setTerms(initialData.terms ?? `1. Goods once sold will not be taken back or exchanged\n2. All disputes are subject to GOA Jurisdiction only.`);
+
+      // Update discount - preserve 0 values
+      setDiscount(initialData.discount ?? 0);
+    }
+  }, [initialData]);
 
   const total = items.reduce(
     (s, it) => s + Number(it.rooms || 0) * Number(it.rate || 0) * Number(it.nights || 0),
@@ -351,13 +421,28 @@ export default function QuotationGenerator({
   };
 
   // Auto-update title and document type based on invoice type
+  // Only update if we're not in edit mode or if the values are still at defaults
   useEffect(() => {
-    if (invoiceType === 'tax-invoice') {
-      setMeta(prev => ({ ...prev, title: "TAX INVOICE", documentType: "Invoice No." }));
-    } else {
-      setMeta(prev => ({ ...prev, title: "QUOTATION", documentType: "Quotation No." }));
+    // Skip auto-update if we have initialData (edit mode) - preserve backend values
+    if (initialData && mode === 'edit') {
+      return;
     }
-  }, [invoiceType]);
+    
+    // Only auto-update if values are at defaults (create mode or user hasn't customized)
+    setMeta(prev => {
+      const isDefaultTitle = prev.title === "QUOTATION" || prev.title === "TAX INVOICE";
+      const isDefaultDocType = prev.documentType === "Quotation No." || prev.documentType === "Invoice No.";
+      
+      if (isDefaultTitle && isDefaultDocType) {
+        if (invoiceType === 'tax-invoice') {
+          return { ...prev, title: "TAX INVOICE", documentType: "Invoice No." };
+        } else {
+          return { ...prev, title: "QUOTATION", documentType: "Quotation No." };
+        }
+      }
+      return prev;
+    });
+  }, [invoiceType, initialData, mode]);
 
   // Download PDF with robust checks and dynamic import
   const downloadPDF = async () => {
